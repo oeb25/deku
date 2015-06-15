@@ -94,10 +94,6 @@ it('it should add indexes to children', function () {
   assert(node.children[6] === null)
 });
 
-it('should render null elements as noscript elements', function (done) {
-
-});
-
 it('should allow a single DOM node as a child', function () {
   var node = dom('div', null, dom('span'));
   assert(node.children[0].type === 'element');

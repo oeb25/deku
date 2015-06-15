@@ -357,3 +357,30 @@ it('should remove references to child components when they are removed', functio
     assert(Object.keys(renderer.inspect().children).length === 2)
   })
 });
+
+
+/**
+ * Null elements should be treated as a removal, but it should not
+ * move siblings around.
+ */
+it.only('should diff elements with null elements', function () {
+  var left = dom('div', null, [
+    null,
+    dom('div'),
+    null
+  ])
+  var right = dom('div', null, [
+    dom('div'),
+    dom('div'),
+    null
+  ])
+  var app = deku()
+  app.mount(left);
+  mount(app, function(el, renderer){
+    var div = el.firstElementChild
+    var leftEl = div.children[1]
+    app.mount(right)
+    var rightEl = div.children[1]
+    assert(leftEl === rightEl)
+  })
+});
