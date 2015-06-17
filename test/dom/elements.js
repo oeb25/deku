@@ -363,7 +363,8 @@ it('should remove references to child components when they are removed', functio
  * Null elements should be treated as a removal, but it should not
  * move siblings around.
  */
-it.only('should diff elements with null elements', function () {
+
+it('should diff elements with null elements', function () {
   var left = dom('div', null, [
     null,
     dom('div'),

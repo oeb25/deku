@@ -82,16 +82,18 @@ it('it should add indexes to children', function () {
     dom('span'),
     dom('span'),
     dom('span'),
-    null
+    null,
+    dom('span')
   ]);
-  assert(node.children.length === 7)
+  assert(node.children.length === 8)
   assert(node.children[0] === null)
-  assert(node.children[1].index === 1)
-  assert(node.children[2].index === 2)
-  assert(node.children[3].index === 3)
-  assert(node.children[4].index === 4)
-  assert(node.children[5].index === 5)
+  assert(node.children[1].index === 0)
+  assert(node.children[2].index === 1)
+  assert(node.children[3].index === 2)
+  assert(node.children[4].index === 3)
+  assert(node.children[5].index === 4)
   assert(node.children[6] === null)
+  assert(node.children[7].index === 5)
 });
 
 it('should allow a single DOM node as a child', function () {
