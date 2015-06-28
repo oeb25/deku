@@ -6,7 +6,7 @@ if (typeof document !== 'undefined') {
   var client = require('./client')
   exports.render = client.render
   exports.remove = client.remove
-  exports.inspect = client.inspect
+  exports.view = client.view
 }
 
 /**

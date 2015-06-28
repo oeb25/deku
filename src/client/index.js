@@ -18,7 +18,7 @@ var returnElement = pool.returnElement
 
 exports.render = curry(render)
 exports.remove = curry(removeContainerByNode)
-exports.inspect = curry(inspect)
+exports.view = curry(view)
 
 var containers = {}
 var pendingProps = {}
@@ -65,7 +65,8 @@ function removeContainerByNode (node) {
  * @param {HTMLElement} container
  */
 
-function inspect (node) {
+function view (node) {
+  debugger
   // var container = getContainerByNode(node)
 }
 
@@ -178,25 +179,6 @@ function render (node, vnode) {
 }
 
 /**
- * Render and mount a component to the native dom.
- *
- * @param {Entity} entity
- * @return {HTMLElement}
- */
-
-function mountEntity (entity) {
-  children[entity.id] = {}
-  entities[entity.id] = entity
-  commit(entity.id)
-  var virtualElement = renderEntity(entity)
-  var nativeElement = toNative(entity.id, '0', virtualElement)
-  virtualElements[entity.id] = virtualElement
-  nativeElements[entity.id] = nativeElement
-  mountQueue.push(entity.id)
-  return nativeElement
-}
-
-/**
  * Remove a component from the native dom.
  *
  * @param {Entity} entity
@@ -204,8 +186,8 @@ function mountEntity (entity) {
 
 function unmountEntity (entityId) {
   var entity = entities[entityId]
-  var nativeElement = nativeElements[entityId]
   if (!entity) return
+  var nativeElement = nativeElements[entityId]
   trigger('beforeUnmount', entity, [toComponent(entityId), nativeElement])
   unmountChildren(entityId)
   removeAllEvents(entityId)
@@ -215,6 +197,8 @@ function unmountEntity (entityId) {
   delete pendingState[entityId]
   delete virtualElements[entityId]
   delete nativeElements[entityId]
+  delete entityProps[entityId]
+  delete entityState[entityId]
 }
 
 /**
@@ -251,9 +235,7 @@ function updateEntity (entityId) {
  */
 
 function updateChildren (entityId) {
-  forEach(children[entityId], function (childId) {
-    updateEntity(childId)
-  })
+  forEach(children[entityId], updateEntity)
 }
 
 /**
@@ -263,9 +245,7 @@ function updateChildren (entityId) {
  */
 
 function unmountChildren (entityId) {
-  forEach(children[entityId], function (childId) {
-    unmountEntity(childId)
-  })
+  forEach(children[entityId], unmountEntity)
 }
 
 /**
@@ -312,14 +292,22 @@ function toNativeElement (entityId, path, vnode) {
  * Create a native element from a component.
  */
 
-function toNativeComponent (entityId, path, vnode) {
-  var child = createEntity(vnode.component, entityId)
-  var initialProps = defaults(vnode.props, child.type.defaultProps)
-  var initialState = child.type.initialState ? child.type.initialState(initialProps) : {}
-  entityProps[child.id] = initialProps
-  entityState[child.id] = initialState
-  children[entityId][path] = child.id
-  return mountEntity(child)
+function toNativeComponent (parentId, path, vnode) {
+  var entity = createEntity(path, vnode.component, parentId)
+  var initialProps = defaults(vnode.props, entity.type.defaultProps)
+  var initialState = entity.type.initialState ? entity.type.initialState(initialProps) : {}
+  children[parentId] = {}
+  children[parentId][path] = entity.id
+  entityProps[entity.id] = initialProps
+  entityState[entity.id] = initialState
+  entities[entity.id] = entity
+  commit(entity.id)
+  var virtualElement = renderEntity(entity)
+  var nativeElement = toNative(entity.id, '0', virtualElement)
+  virtualElements[entity.id] = virtualElement
+  nativeElements[entity.id] = nativeElement
+  mountQueue.push(entity.id)
+  return nativeElement
 }
 
 /**
@@ -360,28 +348,33 @@ function diffText (previous, current, el) {
 }
 
 /**
+ * Group an array of virtual nodes using their keys
+ * @param  {Object} acc
+ * @param  {Object} child
+ * @return {Object}
+ */
+
+function keyMapReducer (acc, child) {
+  if (child && child.key != null) {
+    acc[child.key] = child
+  }
+  return acc
+}
+
+/**
  * Diff the children of an ElementNode.
  */
 
 function diffChildren (path, entityId, prev, next, el) {
   var positions = []
-  var hasKeys = false
   var childNodes = Array.prototype.slice.apply(el.childNodes)
   var leftKeys = reduce(prev.children, keyMapReducer, {})
   var rightKeys = reduce(next.children, keyMapReducer, {})
   var currentChildren = assign({}, children[entityId])
 
-  function keyMapReducer (acc, child) {
-    if (child && child.key != null) {
-      acc[child.key] = child
-      hasKeys = true
-    }
-    return acc
-  }
-
   // Diff all of the nodes that have keys. This lets us re-used elements
   // instead of overriding them and lets us move them around.
-  if (hasKeys) {
+  if (!isEmpty(leftKeys) && !isEmpty(rightKeys)) {
 
     // Removals
     forEach(leftKeys, function (leftNode, key) {
@@ -903,9 +896,9 @@ function removeAllEvents (entityId) {
  * @param {Object} props
  */
 
-function createEntity (type, ownerId) {
+function createEntity (id, type, ownerId) {
   return {
-    id: uid(),
+    id: id,
     ownerId: ownerId,
     type: type,
     displayName: type.name

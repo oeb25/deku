@@ -5,39 +5,39 @@ import Emitter from 'component-emitter'
 import raf from 'component-raf'
 import assert from 'assert'
 import dom from 'virtual-element'
-import {render,remove} from '../../'
+import {render,remove,view} from '../../'
 import {HelloWorld,Span,TwoWords,mount,div} from '../helpers'
 import memoize from 'memoizee'
 
 it('should render and remove an element', function(){
-  var el = div();
-  render(el, <span>Hello World</span>);
-  assert.equal(el.innerHTML, '<span>Hello World</span>');
-  remove(el);
-  assert.equal(el.innerHTML, '');
-})
-
-it.only('should replace a mounted element', function(){
   var el = div()
-  var renderTest = render(el)
-  renderTest(<span>Hello World</span>)
-  renderTest(<div>Foo!</div>)
-  assert.equal(el.innerHTML, '<div>Foo!</div>');
+  render(el, <span>Hello World</span>)
+  assert.equal(el.innerHTML, '<span>Hello World</span>')
   remove(el)
-  assert.equal(el.innerHTML, '');
+  assert.equal(el.innerHTML, '')
 })
 
-it('should remove the mounted element when unmounted', function(){
-  var app = deku();
-  app.mount(<span>Hello World</span>);
-  var el = div();
-  var renderer = render(app, el, { batching: false });
-  assert.equal(el.innerHTML, '<span>Hello World</span>');
-  app.unmount();
-  assert.equal(el.innerHTML, '');
-  app.mount(<div>Hello World</div>);
+it('should replace a mounted element', function(){
+  var el = div()
+  var mount = render(el)
+  mount(<span>Hello World</span>)
+  mount(<div>Foo!</div>)
+  assert.equal(el.innerHTML, '<div>Foo!</div>')
+  remove(el)
+  assert.equal(el.innerHTML, '')
+})
+
+it.only('should remove the mounted element when unmounted', function(){
+  var el = div()
+  debugger
+  
+  render(el, <span>Hello World</span>)
+  assert.equal(el.innerHTML, '<span>Hello World</span>')
+  remove(el)
+  assert.equal(el.innerHTML, '')
+  render(el, <span>Hello World</span>)
   assert.equal(el.innerHTML, '<div>Hello World</div>');
-  renderer.remove();
+  remove(el)
   assert.equal(el.innerHTML, '');
 })
 
