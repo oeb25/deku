@@ -10,8 +10,8 @@ BIN := ./node_modules/.bin
 # Wildcards.
 #
 
-lib = $(shell find lib/*.js)
-js = $(shell find lib/*.js test/*.js)
+lib = $(shell find src/**/*.js)
+js = $(shell find src/**/*.js test/*.js)
 
 #
 # Default.
@@ -46,8 +46,8 @@ test-phantom:
 test-cloud: tests.js
 	@TRAVIS_BUILD_NUMBER=$(CIRCLE_BUILD_NUM) zuul -- tests.js
 
-test-lint: $(lib)
-	@$(BIN)/standard lib/*
+lint: $(lib)
+	@$(BIN)/standard src/**/*.js
 .PHONY: test-lint
 
 test-watch:

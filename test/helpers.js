@@ -1,4 +1,4 @@
-import {render,deku,dom} from '../'
+import {render,remove} from '../'
 import assert from 'assert'
 
 /**

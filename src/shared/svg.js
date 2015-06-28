@@ -79,7 +79,7 @@ exports.attributes = {
   'x': true,
   'y1': true,
   'y2': true,
-  'y': true,
+  'y': true
 }
 
 /**

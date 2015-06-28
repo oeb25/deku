@@ -342,4 +342,4 @@ Deku is built with Browserify. You can run the tests in a browser by running `ma
 
 ## License
 
-MIT. See [LICENSE.md](http://github.com/dekujs/deku/blob/master/LICENSE.md)
+The MIT License (MIT) Copyright (c) 2015 Anthony Short

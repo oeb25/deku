@@ -1,32 +1,27 @@
 require('es6-promise').polyfill()
 require("babelify/polyfill")
 
-describe('virtual', function(){
-  require('./virtual')
-  // require('./virtual/jsx')
-});
-
-describe('DOM Renderer', function(){
-  require('./dom')
-  require('./dom/mount-hook')
-  require('./dom/update-hook')
-  require('./dom/props')
-  require('./dom/elements')
-  require('./dom/text')
-  require('./dom/attributes')
-  require('./dom/replace')
-  require('./dom/events')
-  require('./dom/state')
-  require('./dom/pool')
-  require('./dom/data')
-  require('./dom/validate')
-  require('./dom/keys')
-  require('./dom/hooks')
-  require('./dom/svg')
-  require('./dom/sources')
-  require('./dom/register')
+describe('Client Rendering', function(){
+  require('./client')
+  // require('./client/mount-hook')
+  // require('./client/update-hook')
+  // require('./client/props')
+  // require('./client/elements')
+  // require('./client/text')
+  // require('./client/attributes')
+  // require('./client/replace')
+  // require('./client/events')
+  // require('./client/state')
+  // require('./client/pool')
+  // require('./client/data')
+  // require('./client/validate')
+  // require('./client/keys')
+  // require('./client/hooks')
+  // require('./client/svg')
+  // require('./client/sources')
+  // require('./client/register')
 })
 
-describe('String Renderer', function(){
-  require('./string')
+describe('Server Renderer', function(){
+  // require('./server')
 })

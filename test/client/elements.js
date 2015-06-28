@@ -364,23 +364,31 @@ it('should remove references to child components when they are removed', functio
  * move siblings around.
  */
 
-it('should diff elements with null elements', function () {
-  var left = dom('div', null, [
+it.only('should diff elements with null elements', function () {
+  var one = dom('div', null, [
     null,
     dom('div'),
     null
   ])
-  var right = dom('div', null, [
+  var two = dom('div', null, [
     dom('div'),
     dom('div'),
     null
   ])
+  var three = dom('div', null, [
+    null,
+    dom('div'),
+    dom('div')
+  ])
   var app = deku()
-  app.mount(left);
+  app.mount(one);
   mount(app, function(el, renderer){
     var div = el.firstElementChild
     var leftEl = div.children[1]
-    app.mount(right)
+    app.mount(two)
+    var rightEl = div.children[1]
+    assert(leftEl === rightEl)
+    app.mount(three)
     var rightEl = div.children[1]
     assert(leftEl === rightEl)
   })

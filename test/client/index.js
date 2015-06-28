@@ -4,28 +4,26 @@ import trigger from 'trigger-event'
 import Emitter from 'component-emitter'
 import raf from 'component-raf'
 import assert from 'assert'
-import {component,deku,dom,render} from '../../'
+import dom from 'virtual-element'
+import {render,remove} from '../../'
 import {HelloWorld,Span,TwoWords,mount,div} from '../helpers'
 import memoize from 'memoizee'
 
 it('should render and remove an element', function(){
-  var app = deku();
-  app.mount(<span>Hello World</span>);
   var el = div();
-  var renderer = render(app, el, { batching: false });
+  render(el, <span>Hello World</span>);
   assert.equal(el.innerHTML, '<span>Hello World</span>');
-  renderer.remove();
+  remove(el);
   assert.equal(el.innerHTML, '');
 })
 
-it('should replace a mounted element', function(){
-  var app = deku();
-  app.mount(<span>Hello World</span>);
-  var el = div();
-  var renderer = render(app, el, { batching: false });
-  app.mount(<div>Foo!</div>);
+it.only('should replace a mounted element', function(){
+  var el = div()
+  var renderTest = render(el)
+  renderTest(<span>Hello World</span>)
+  renderTest(<div>Foo!</div>)
   assert.equal(el.innerHTML, '<div>Foo!</div>');
-  renderer.remove();
+  remove(el)
   assert.equal(el.innerHTML, '');
 })
 
