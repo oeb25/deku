@@ -2,7 +2,7 @@ var events = require('../shared/events')
 var nodeType = require('../shared/node-type')
 var defaults = require('defaults')
 
-exports.render = render
+module.exports = render
 
 function render (element) {
   return nodeToString(element, '0')

@@ -6,8 +6,10 @@ var defaults = require('defaults')
 var forEach = require('fast.js/forEach')
 var assign = require('fast.js/object/assign')
 var reduce = require('fast.js/reduce')
+var indexOf = require('fast.js/array/indexOf')
 var isPromise = require('is-promise')
 var curry = require('curry')
+var compose = require('compose-function')
 var isEmpty = require('is-empty')
 var pool = require('./pool')
 var svg = require('../shared/svg')
@@ -15,11 +17,6 @@ var events = require('../shared/events')
 var nodeType = require('../shared/node-type')
 var createElement = pool.createElement
 var returnElement = pool.returnElement
-
-exports.render = curry(render)
-exports.remove = curry(removeContainerByNode)
-exports.view = curry(view)
-
 var containers = {}
 var pendingProps = {}
 var pendingState = {}
@@ -33,6 +30,21 @@ var virtualElements = {}
 var entityState = {}
 var entityProps = {}
 var inProgress = {}
+
+// HTMLElement -> VirtualElement -> undefined
+exports.render = curry(render)
+
+// Node -> undefined
+exports.remove = compose(removeContainer, getContainerByNode)
+
+// HTMLElement -> Object
+exports.inspect = curry(inspect)
+
+// String -> Object -> undefined
+exports.updateState = updateState
+
+// String -> Object -> undefined
+exports.updateProps = updateProps
 
 /**
  * Remove a container
@@ -50,24 +62,24 @@ function removeContainer (containerId) {
 }
 
 /**
- * Remove a render tree from a container
- *
- * @param {HTMLElement} node
- */
-
-function removeContainerByNode (node) {
-  removeContainer(getContainerByNode(node))
-}
-
-/**
- * Get the entity tree for a container.
+ * Get the entity tree for a container. This allows you to view the tree
+ * of components, including their state. This could be used to create developer
+ * tools or to inject props into components within the tree.
  *
  * @param {HTMLElement} container
  */
 
-function view (node) {
+function inspect (node) {
   debugger
   // var container = getContainerByNode(node)
+}
+
+/**
+ * Walk down an entity tree created by `inspect`
+ */
+
+function walk (tree) {
+
 }
 
 /**

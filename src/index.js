@@ -1,7 +1,4 @@
-/**
- * Render scenes to the DOM.
- */
-
+// Client rendering
 if (typeof document !== 'undefined') {
   var client = require('./client')
   exports.render = client.render
@@ -9,8 +6,9 @@ if (typeof document !== 'undefined') {
   exports.view = client.view
 }
 
-/**
- * Render scenes to a string
- */
-
+// Server rendering
 exports.renderString = require('./server')
+
+// Export for convenience
+exports.dom =
+exports.element = require('virtual-element')
