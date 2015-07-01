@@ -2,6 +2,16 @@ require('es6-promise').polyfill()
 require("babelify/polyfill")
 
 describe('Client Rendering', function(){
+
+  beforeEach(function(){
+    this.el = document.createElement('div')
+    document.body.appendChild(this.el)
+  })
+
+  afterEach(function(){
+    document.body.removeChild(this.el)
+  })
+
   require('./client')
   // require('./client/mount-hook')
   // require('./client/update-hook')

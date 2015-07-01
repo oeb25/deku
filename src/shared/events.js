@@ -1,5 +1,7 @@
 /**
- * All of the events can bind to
+ * All of the events can bind to. The keys are the attribute names we expect
+ * and the values are the actual DOM events they map to. We can use this in
+ * both the DOM and string renderer so we can treat these as a special case.
  */
 
 module.exports = {

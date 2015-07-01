@@ -5,12 +5,12 @@ import Emitter from 'component-emitter'
 import raf from 'component-raf'
 import assert from 'assert'
 import dom from 'virtual-element'
-import {render,remove,view} from '../../'
+import {render,remove} from '../../'
 import {HelloWorld,Span,TwoWords,mount,div} from '../helpers'
 import memoize from 'memoizee'
 
-it('should render and remove an element', function(){
-  var el = div()
+it.only('should render and remove an element', function(){
+  var el = this.el
   render(el, <span>Hello World</span>)
   assert.equal(el.innerHTML, '<span>Hello World</span>')
   remove(el)
@@ -18,44 +18,35 @@ it('should render and remove an element', function(){
 })
 
 it('should replace a mounted element', function(){
-  var el = div()
-  var mount = render(el)
-  mount(<span>Hello World</span>)
-  mount(<div>Foo!</div>)
+  var el = this.el
+  render(el, <span>Hello World</span>)
+  render(el, <div>Foo!</div>)
   assert.equal(el.innerHTML, '<div>Foo!</div>')
   remove(el)
   assert.equal(el.innerHTML, '')
 })
 
-it.only('should remove the mounted element when unmounted', function(){
-  var el = div()
-  debugger
-  
+it('should remove the mounted element when unmounted', function(){
+  var el = this.el
   render(el, <span>Hello World</span>)
   assert.equal(el.innerHTML, '<span>Hello World</span>')
   remove(el)
   assert.equal(el.innerHTML, '')
   render(el, <span>Hello World</span>)
-  assert.equal(el.innerHTML, '<div>Hello World</div>');
+  assert.equal(el.innerHTML, '<div>Hello World</div>')
   remove(el)
-  assert.equal(el.innerHTML, '');
+  assert.equal(el.innerHTML, '')
 })
 
 it('should render and remove a component', function(){
   var Test = {
-    render: function(){
-      return dom('span', null, 'Hello World');
-    }
-  };
-  var app = deku();
-  app.mount(
-    dom(Test)
-  );
-  var el = div();
-  var renderer = render(app, el, { batching: false });
-  assert.equal(el.innerHTML, '<span>Hello World</span>');
-  renderer.remove();
-  assert.equal(el.innerHTML, '');
+    render: () => <span>Hello World</span>
+  }
+  var el = div()
+  render(el, <Test />)
+  assert.equal(el.innerHTML, '<span>Hello World</span>')
+  remove(el)
+  assert.equal(el.innerHTML, '')
 })
 
 it('should have initial state', function(){
@@ -71,11 +62,10 @@ it('should have initial state', function(){
       return <span count={state.count}>{state.text}</span>;
     }
   };
-  var app = deku();
-  app.mount(<DefaultState initialCount={2} />);
-  mount(app, function(el){
-    assert.equal(el.innerHTML, '<span count="2">Hello World</span>')
-  })
+  var el = div()
+  render(el, <DefaultState initialCount={2} />)
+  assert.equal(el.innerHTML, '<span count="2">Hello World</span>')
+  remove(el)
 })
 
 it('should create a component with properties', function(){
@@ -85,9 +75,7 @@ it('should create a component with properties', function(){
       return dom('span', null, [props.text])
     }
   }
-  var app = deku()
-  app.mount(dom(Test, { text: 'Hello World' }))
-  mount(app, function(el){
+  mount(<Test text="Hello World" />, function(el){
     assert.equal(el.innerHTML, '<span>Hello World</span>')
   })
 })

@@ -1,7 +1,6 @@
 var raf = require('component-raf')
 var isDom = require('is-dom')
 var uid = require('get-uid')
-var keypath = require('object-path')
 var defaults = require('defaults')
 var forEach = require('fast.js/forEach')
 var assign = require('fast.js/object/assign')
@@ -12,16 +11,18 @@ var curry = require('curry')
 var compose = require('compose-function')
 var isEmpty = require('is-empty')
 var pool = require('./pool')
+var handlers = require('./handlers')
 var svg = require('../shared/svg')
+var pathHelpers = require('../shared/path')
 var events = require('../shared/events')
-var nodeType = require('../shared/node-type')
+var elementHelpers = require('../shared/element')
+var nodeType = elementHelpers.nodeType
 var createElement = pool.createElement
 var returnElement = pool.returnElement
 var containers = {}
 var pendingProps = {}
 var pendingState = {}
 var entities = {}
-var handlers = {}
 var mountQueue = []
 var children = {}
 var frames = {}
@@ -31,19 +32,19 @@ var entityState = {}
 var entityProps = {}
 var inProgress = {}
 
-// HTMLElement -> VirtualElement -> undefined
+// (HTMLElement, VirtualElement) -> void
 exports.render = curry(render)
 
-// Node -> undefined
+// (Node) -> undefined
 exports.remove = compose(removeContainer, getContainerByNode)
 
-// HTMLElement -> Object
-exports.inspect = curry(inspect)
+// (HTMLElement) -> Object
+exports.inspect = inspect
 
-// String -> Object -> undefined
+// (EntityId, Object) -> void
 exports.updateState = updateState
 
-// String -> Object -> undefined
+// (EntityId, Object) -> void
 exports.updateProps = updateProps
 
 /**
@@ -72,14 +73,6 @@ function removeContainer (containerId) {
 function inspect (node) {
   debugger
   // var container = getContainerByNode(node)
-}
-
-/**
- * Walk down an entity tree created by `inspect`
- */
-
-function walk (tree) {
-
 }
 
 /**
@@ -134,8 +127,7 @@ function invalidate (entityId) {
   var frameId = frames[containerId]
   if (frameId) return
   frames[containerId] = raf(function () {
-    var container = containers[containerId]
-    render(container, virtualElements[containerId])
+    render(containers[containerId], virtualElements[containerId])
   })
 }
 
@@ -147,7 +139,7 @@ function clearFrame (containerId) {
   var frameId = frames[containerId]
   if (!frameId) return
   raf.cancel(frameId)
-  frames[containerId] = 0
+  delete frames[containerId]
 }
 
 /**
@@ -202,7 +194,7 @@ function unmountEntity (entityId) {
   var nativeElement = nativeElements[entityId]
   trigger('beforeUnmount', entity, [toComponent(entityId), nativeElement])
   unmountChildren(entityId)
-  removeAllEvents(entityId)
+  handlers.removeAllHandlers(entityId)
   delete entities[entityId]
   delete children[entityId]
   delete pendingProps[entityId]
@@ -224,12 +216,12 @@ function unmountEntity (entityId) {
 
 function updateEntity (entityId) {
   var entity = entities[entityId]
-  if (!shouldUpdate(entity)) return updateChildren(entityId)
   var currentTree = virtualElements[entityId]
   var currentElement = nativeElements[entityId]
   var previousState = entity.state
   var previousProps = entity.props
   commit(entity.id)
+  if (!shouldRender(entity)) return updateChildren(entityId)
   var nextTree = renderEntity(entity)
   if (nextTree === currentTree) return updateChildren(entityId)
   var updatedElement = patch(entityId, currentTree, nextTree, currentElement)
@@ -598,7 +590,7 @@ function removeElement (entityId, path, el) {
     // Then we need to find any components within this
     // branch and unmount them.
     forEach(childrenByPath, function (childId, childPath) {
-      if (childPath === path || isWithinPath(path, childPath)) {
+      if (childPath === path || pathHelpers.isWithinPath(path, childPath)) {
         unmountEntity(childId)
         removals.push(childPath)
       }
@@ -606,8 +598,8 @@ function removeElement (entityId, path, el) {
 
     // Remove all events at this path or below it
     forEach(entityHandlers, function (fn, handlerPath) {
-      if (handlerPath === path || isWithinPath(path, handlerPath)) {
-        removeEvent(entityId, handlerPath)
+      if (handlerPath === path || pathHelpers.isWithinPath(path, handlerPath)) {
+        handlers.removeHandler(entityId, handlerPath)
       }
     })
   }
@@ -651,19 +643,11 @@ function replaceElement (entityId, path, el, vnode) {
     parent.appendChild(newEl)
   }
 
-  if (isRoot(path)) {
+  if (pathHelpers.isRoot(path)) {
     updateEntityNativeElement(entityId, newEl)
   }
 
   return newEl
-}
-
-/**
- * Check if a path is the root
- */
-
-function isRoot (path) {
-  return path === '0'
 }
 
 /**
@@ -686,6 +670,21 @@ function updateEntityNativeElement (entityId, newEl) {
 }
 
 /**
+ * Create an event handler that can return a value to update state
+ * instead of relying on side-effects.
+ */
+
+var eventHandler = curry(function (entityId, e) {
+  var entity = entities[entityId]
+  if (entity) {
+    var update = updateState(entityId)
+    update(fn(e, toComponent(entityId), update))
+  } else {
+    fn(e)
+  }
+})
+
+/**
  * Set the attribute of an element, performing additional transformations
  * dependning on the attribute name
  *
@@ -696,7 +695,7 @@ function updateEntityNativeElement (entityId, newEl) {
 
 function setAttribute (entityId, path, el, name, value) {
   if (events[name]) {
-    addEvent(entityId, path, events[name], value)
+    addEvent(entityId, path, events[name], eventHandler(entityId))
     return
   }
   switch (name) {
@@ -728,7 +727,7 @@ function setAttribute (entityId, path, el, name, value) {
 
 function removeAttribute (entityId, path, el, name) {
   if (events[name]) {
-    removeEvent(entityId, path, events[name])
+    handlers.removeHandler(entityId, path, events[name])
     return
   }
   switch (name) {
@@ -745,23 +744,6 @@ function removeAttribute (entityId, path, el, name) {
       el.removeAttribute(name)
       break
   }
-}
-
-/**
- * Checks to see if one tree path is within
- * another tree path. Example:
- *
- * 0.1 vs 0.1.1 = true
- * 0.2 vs 0.3.5 = false
- *
- * @param {String} target
- * @param {String} path
- *
- * @return {Boolean}
- */
-
-function isWithinPath (target, path) {
-  return path.indexOf(target + '.') === 0
 }
 
 /**
@@ -829,8 +811,8 @@ var updateProps = curry(function (entityId, nextProps) {
  */
 
 function commit (entity) {
-  assign(entityState[entity.id], pendingState[entity.id])
-  assign(entityProps[entity.id], pendingProps[entity.id])
+  entityState[entity.id] = assign(entityState[entity.id] || {}, pendingState[entity.id])
+  entityProps[entity.id] = assign(entityProps[entity.id] || {}, pendingProps[entity.id])
   delete pendingState[entity.id]
   delete pendingProps[entity.id]
 }
@@ -845,7 +827,7 @@ function handleEvent (event) {
   var target = event.target
   var eventType = event.type
   while (target) {
-    var fn = keypath.get(handlers, [target.__entity__, target.__path__, eventType])
+    var fn = handlers.getHandler(target.__entity__, target.__path__, eventType)
     if (fn) {
       event.delegateTarget = target
       fn(event)
@@ -853,49 +835,6 @@ function handleEvent (event) {
     }
     target = target.parentNode
   }
-}
-
-/**
- * Bind events for an element, and all it's rendered child elements.
- *
- * @param {String} path
- * @param {String} event
- * @param {Function} fn
- */
-
-function addEvent (entityId, path, eventType, fn) {
-  keypath.set(handlers, [entityId, path, eventType], function (e) {
-    var entity = entities[entityId]
-    if (entity) {
-      var update = updateState(entityId)
-      update(fn.call(null, e, toComponent(entityId), update))
-    } else {
-      fn(e)
-    }
-  })
-}
-
-/**
- * Unbind events for a entityId
- *
- * @param {String} entityId
- */
-
-function removeEvent (entityId, path, eventType) {
-  var args = [entityId]
-  if (path) args.push(path)
-  if (eventType) args.push(eventType)
-  keypath.del(handlers, args)
-}
-
-/**
- * Unbind all events from an entity
- *
- * @param {Entity} entity
- */
-
-function removeAllEvents (entityId) {
-  keypath.del(handlers, [entityId])
 }
 
 /**
@@ -912,8 +851,7 @@ function createEntity (id, type, ownerId) {
   return {
     id: id,
     ownerId: ownerId,
-    type: type,
-    displayName: type.name
+    type: type
   }
 }
 
@@ -957,12 +895,13 @@ function renderEntity (entity) {
  * @return {Boolean}
  */
 
-function shouldUpdate (entity) {
+function shouldRender (entity) {
   if (!isDirty(entity)) return false
-  if (!entity.type.shouldUpdate) return true
+  var fn = entity.type.shouldRender || entity.type.shouldUpdate
+  if (!fn) return true
   var nextProps = pendingProps[entity.id]
   var nextState = pendingState[entity.id]
-  return entity.type.shouldUpdate(toComponent(entity.id), nextProps, nextState)
+  return fn(toComponent(entity.id), nextProps, nextState)
 }
 
 /**
