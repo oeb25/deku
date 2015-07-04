@@ -220,8 +220,9 @@ function updateEntity (entityId) {
   var currentElement = nativeElements[entityId]
   var previousState = entity.state
   var previousProps = entity.props
+  var shouldUpdate = shouldRender(entity)
   commit(entity.id)
-  if (!shouldRender(entity)) return updateChildren(entityId)
+  if (!shouldUpdate) return updateChildren(entityId)
   var nextTree = renderEntity(entity)
   if (nextTree === currentTree) return updateChildren(entityId)
   var updatedElement = patch(entityId, currentTree, nextTree, currentElement)
