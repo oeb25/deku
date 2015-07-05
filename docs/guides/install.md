@@ -2,7 +2,7 @@
 
 There are multiple ways to install and use Deku. No matter which option you choose, you should probably look at using an ES6 transformer like [Babel](https://babeljs.io).
 
-## Browserify 
+## Browserify
 
 ```
 npm install deku
@@ -17,7 +17,7 @@ browserify -t babelify main.js > build.js
 ## Duo
 
 ```
-import {element,tree,render} from 'segmentio/deku@0.2.1'
+import {render} from 'dekujs/deku'
 ```
 
 With Duo you can just import directly from Github, then build it:
@@ -37,6 +37,8 @@ duo --use duo-babel main.js > build.js
 ```
 bower install deku
 ```
+
+You'll want to load `bower_components/deku/build/deku.js` onto your page.
 
 ## Manual Download
 

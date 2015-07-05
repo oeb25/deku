@@ -2,7 +2,7 @@
 
 import assert from 'assert'
 import {component,dom,deku,render} from '../../'
-import {mount,div} from '../helpers'
+import {mount,div} from '../lib/helpers'
 
 // Helpers.
 

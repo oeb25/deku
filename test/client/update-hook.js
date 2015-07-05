@@ -2,7 +2,7 @@
 
 import raf from 'component-raf'
 import {component,deku,render,dom} from '../../';
-import {mount,div} from '../helpers';
+import {mount,div} from '../lib/helpers';
 import assert from 'assert';
 
 var Updater = {

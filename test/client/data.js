@@ -2,7 +2,7 @@
 
 import {dom,deku} from '../../';
 import trigger from 'trigger-event'
-import {mount} from '../helpers';
+import {mount} from '../lib/helpers';
 import assert from 'assert';
 
 it('should get default value from data value', function(){

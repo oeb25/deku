@@ -3,7 +3,7 @@
 import raf from 'component-raf';
 import assert from 'assert';
 import {tree,dom,render} from '../../';
-import {mount,div} from '../helpers';
+import {mount,div} from '../lib/helpers';
 
 it('should render svg elements', function(){
 

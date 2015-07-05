@@ -4,7 +4,7 @@ import trigger from 'trigger-event'
 import raf from 'component-raf'
 import assert from 'assert'
 import {component,dom,deku} from '../../'
-import {mount,div} from '../helpers'
+import {mount,div} from '../lib/helpers'
 
 var AttrComponent = {
   render: function(component){

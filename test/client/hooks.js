@@ -1,7 +1,7 @@
 /** @jsx element */
 
 import raf from 'component-raf'
-import {mount,div} from '../helpers'
+import {mount,div} from '../lib/helpers'
 import {render,deku,element} from '../../'
 import assert from 'assert'
 

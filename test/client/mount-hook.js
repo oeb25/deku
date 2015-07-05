@@ -1,4 +1,4 @@
-import {mount,div} from '../helpers'
+import {mount,div} from '../lib/helpers'
 import {component,render,deku,dom} from '../../'
 import assert from 'assert'
 

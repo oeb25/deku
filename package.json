@@ -17,18 +17,15 @@
     "minify": "^1.4.11",
     "mochify": "^2.1.1",
     "phantomjs": "^1.9.17",
-    "serve": "^1.4.0",
     "standard": "^3.6.1",
     "trigger-event": "^1.0.0",
     "zuul": "~1.16.4"
   },
   "dependencies": {
-    "array-flatten": "^1.0.2",
     "component-raf": "^1.2.0",
     "component-type": "^1.1.0",
     "compose-function": "^2.0.0",
     "curry": "^1.2.0",
-    "defaults": "^1.0.2",
     "dom-pool": "^0.1.1",
     "dom-walk": "^0.1.1",
     "fast.js": "^0.1.1",
@@ -37,6 +34,6 @@
     "is-empty": "0.0.1",
     "is-promise": "^2.0.0",
     "object-path": "^0.8.1",
-    "virtual-element": "^1.0.0"
+    "ramda": "^0.15.1"
   }
 }

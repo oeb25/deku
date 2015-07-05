@@ -2,7 +2,7 @@
 
 import assert from 'assert'
 import {dom,deku} from '../../'
-import {mount} from '../helpers'
+import {mount} from '../lib/helpers'
 
 function div() {
   return <div></div>;

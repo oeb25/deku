@@ -1,4 +1,4 @@
-import {render,remove} from '../'
+import {render,remove} from '../../'
 import assert from 'assert'
 
 /**

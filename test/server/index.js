@@ -1,7 +1,8 @@
 /** @jsx dom */
 
 import assert from 'assert'
-import {dom,deku,renderString} from '../../'
+import element from 'virtual-element'
+import {renderString} from '../../'
 
 it('should render an element', function(){
   var Component = {
@@ -10,21 +11,17 @@ it('should render an element', function(){
       return <div></div>
     }
   };
-  var app = deku()
-  app.mount(<Component />)
-  assert.equal(renderString(app), '<div></div>')
+  assert.equal(renderString(<Component />), '<div></div>')
 });
 
 it('should render an element with attributes', function(){
   var Component = {
     render: function(component){
       let {props, state} = component
-      return dom('div', { id: 'foo'});
+      return <div id="foo" />
     }
   };
-  var app = deku()
-  app.mount(<Component />)
-  assert.equal(renderString(app), '<div id="foo"></div>')
+  assert.equal(renderString(<Component />), '<div id="foo"></div>')
 });
 
 it('should render an element with text', function(){
@@ -34,9 +31,7 @@ it('should render an element with text', function(){
       return <div>foo</div>
     }
   }
-  var app = deku()
-  app.mount(<Component />)
-  assert.equal(renderString(app), '<div>foo</div>')
+  assert.equal(renderString(<Component />), '<div>foo</div>')
 });
 
 it('should render an element with child elements', function(){
@@ -46,9 +41,7 @@ it('should render an element with child elements', function(){
       return <div><span>foo</span></div>;
     }
   };
-  var app = deku()
-  app.mount(<Component />)
-  assert.equal(renderString(app), '<div><span>foo</span></div>')
+  assert.equal(renderString(<Component />), '<div><span>foo</span></div>')
 });
 
 it('should render an element with child components', function(){
@@ -64,9 +57,7 @@ it('should render an element with child components', function(){
       return <div><Span /></div>;
     }
   };
-  var app = deku()
-  app.mount(<Div />)
-  assert.equal(renderString(app), '<div><span>foo</span></div>')
+  assert.equal(renderString(<Div />), '<div><span>foo</span></div>')
 });
 
 it('should render an element with component root', function(){
@@ -82,9 +73,7 @@ it('should render an element with component root', function(){
       return <Span />;
     }
   };
-  var app = deku()
-  app.mount(<Component />)
-  assert.equal(renderString(app), '<span>foo</span>')
+  assert.equal(renderString(<Component />), '<span>foo</span>')
 });
 
 it('should render with props', function(){
@@ -94,9 +83,7 @@ it('should render with props', function(){
       return <div>{props.text}</div>;
     }
   };
-  var app = deku()
-  app.mount(<Component text="foo" />)
-  assert.equal(renderString(app), '<div>foo</div>')
+  assert.equal(renderString(<Component text="foo" />), '<div>foo</div>')
 });
 
 it('should render with initial state', function(){
@@ -109,9 +96,7 @@ it('should render with initial state', function(){
       return <div count={state.count}>{state.text}</div>
     }
   };
-  var app = deku()
-  app.mount(<Component initialCount={0} />)
-  assert.equal(renderString(app), '<div count="0">foo</div>')
+  assert.equal(renderString(<Component initialCount={0} />), '<div count="0">foo</div>')
 });
 
 it('should have initial props', function(){
@@ -124,9 +109,7 @@ it('should have initial props', function(){
       text: 'Hello!'
     }
   }
-  var app = deku()
-  app.mount(<Component />)
-  assert.equal(renderString(app), '<div>Hello!</div>')
+  assert.equal(renderString(), '<div>Hello!</div>')
 })
 
 it('should call beforeMount and beforeRender', function(done){
@@ -149,9 +132,7 @@ it('should call beforeMount and beforeRender', function(done){
       return dom('div');
     }
   };
-  var app = deku()
-  app.mount(<Component foo="bar" />)
-  renderString(app)
+  renderString(<Component foo="bar" />)
 })
 
 it('should render innerHTML', function(){
@@ -161,9 +142,7 @@ it('should render innerHTML', function(){
       return dom('div', { innerHTML: '<span>foo</span>' });
     }
   };
-  var app = deku()
-  app.mount(<Component />)
-  assert.equal(renderString(app), '<div><span>foo</span></div>')
+  assert.equal(renderString(<Component />), '<div><span>foo</span></div>')
 })
 
 it('should render the value of inputs', function(){
@@ -173,25 +152,7 @@ it('should render the value of inputs', function(){
       return <input value="foo" />
     }
   };
-  var app = deku()
-  app.mount(<Component />)
-  assert.equal(renderString(app), '<input value="foo"></input>')
-})
-
-it('should render data sources', function(){
-  var Component = {
-    propTypes: {
-      'text': { source: 'text' }
-    },
-    render: function(component){
-      let {props, state} = component
-      return <div>{props.text}</div>
-    }
-  };
-  var app = deku()
-    .set('text', 'Hello World')
-    .mount(<Component />)
-  assert.equal(renderString(app), '<div>Hello World</div>')
+  assert.equal(renderString(<Component />), '<input value="foo"></input>')
 })
 
 it('should not render event handlers as attributes', function () {
@@ -200,7 +161,6 @@ it('should not render event handlers as attributes', function () {
       return <div onClick={foo} />
     }
   }
-  function foo() { return 'blah' }
-  var app = deku(<Component />)
-  assert.equal(renderString(app), '<div></div>')
+  function foo() {}
+  assert.equal(renderString(<Component />), '<div></div>')
 });

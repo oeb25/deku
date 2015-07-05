@@ -1,13 +1,14 @@
 var raf = require('component-raf')
 var isDom = require('is-dom')
 var uid = require('get-uid')
-var defaults = require('defaults')
+var defaults = require('../shared/defaults')
 var forEach = require('fast.js/forEach')
 var assign = require('fast.js/object/assign')
 var reduce = require('fast.js/reduce')
 var isPromise = require('is-promise')
 var curry = require('curry')
 var compose = require('compose-function')
+var functional = require('../shared/functional')
 var isEmpty = require('is-empty')
 var pool = require('./pool')
 var svg = require('../shared/svg')
@@ -20,6 +21,8 @@ var createElement = pool.createElement
 var returnElement = pool.returnElement
 var isRoot = pathHelpers.isRoot
 var isWithinPath = pathHelpers.isWithinPath
+var mapObj = functional.mapObj
+var map = functional.map
 var handlers = {}
 var containers = {}
 var pendingProps = {}
@@ -32,7 +35,6 @@ var nativeElements = {}
 var virtualElements = {}
 var entityState = {}
 var entityProps = {}
-var inProgress = {}
 
 /**
  * Get the container ID given an element
@@ -77,18 +79,24 @@ var getEntity = function (id) {
  */
 
 var getChildren = function (id) {
-  return children[id]
+  return children[id] || {}
+}
+
+/**
+ * Set the new entity child mapping
+ */
+
+var setChildren = function (obj) {
+  children = obj
 }
 
 /**
  * Update all the children of an entity.
  *
- * @param {String} id Component instance id.
+ * (EntityId) -> void
  */
 
-var updateChildren = function (entityId) {
-  forEach(getChildren(entityId), updateEntity)
-}
+var updateChildren = compose(setChildren, mapObj(updateEntity), getChildren)
 
 /**
  * Remove all of the child entities of an entity
@@ -96,9 +104,7 @@ var updateChildren = function (entityId) {
  * @param {Entity} entity
  */
 
-var unmountChildren = function (entityId) {
-  forEach(getChildren(entityId), removeEntity)
-}
+var unmountChildren = compose(mapObj(removeEntity), getChildren)
 
 /**
  * Tell the container it's dirty and needs to re-render.
@@ -176,6 +182,13 @@ var replaceProps = function (entityId, nextProps) {
 }
 
 /**
+ * Invalidate the container for an entity
+ * (EntityId) -> void
+ */
+
+var invalidateEntity = compose(scheduleFrame, clearFrame, getEntityContainer, getEntity)
+
+/**
  * Update an entity to match the latest rendered vode. We always
  * replace the props on the component when composing them. This
  * will trigger a re-render on all children below this point.
@@ -184,13 +197,6 @@ var replaceProps = function (entityId, nextProps) {
  */
 
 var updateProps = compose(invalidateEntity, replaceProps)
-
-/**
- * Invalidate the container for an entity
- * (EntityId) -> void
- */
-
-var invalidateEntity = compose(scheduleFrame, clearFrame, getEntityContainer, getEntity)
 
 /**
  * Add all of the DOM event listeners
@@ -340,7 +346,6 @@ var createContainer = function (node) {
 
 var render = curry(function (node, vnode) {
   var containerId = getContainerByNode(node) || createContainer(node)
-  // var isRendering = inProgress[containerId]
   var nativeElement = nativeElements[containerId]
   var virtualElement = getVirtualElement(containerId)
   clearFrame(containerId)
@@ -355,7 +360,6 @@ var render = curry(function (node, vnode) {
   }
   nativeElements[containerId] = nativeElement
   virtualElements[containerId] = vnode
-  delete inProgress[containerId]
   flushMountQueue()
 })
 
@@ -398,7 +402,7 @@ var updateEntity = function (entityId) {
   var previousState = entity.state
   var previousProps = entity.props
   var shouldUpdate = shouldRender(entity)
-  commitPendingChanges(entity.id)
+  commitPendingChanges(entityId)
   if (!shouldUpdate) return updateChildren(entityId)
   var nextTree = renderEntity(entity)
   if (nextTree === currentTree) return updateChildren(entityId)
@@ -415,10 +419,11 @@ var updateEntity = function (entityId) {
  */
 
 var toNativeComponent = function (parentId, path, vnode) {
-  var entity = createEntity(path, vnode.component, parentId)
-  var initialProps = defaults(vnode.props, entity.type.defaultProps)
-  var initialState = entity.type.initialState ? entity.type.initialState(initialProps) : {}
-  children[parentId] = {}
+  var component = vnode.type
+  var entity = createEntity(path, component, parentId)
+  var initialProps = defaults(vnode.props, component.defaultProps)
+  var initialState = component.initialState ? component.initialState(initialProps) : {}
+  children[parentId] = children[parentId] || {}
   children[parentId][path] = entity.id
   entityProps[entity.id] = initialProps
   entityState[entity.id] = initialState
@@ -690,7 +695,7 @@ var diffElement = function (path, entityId, prev, next, el) {
  */
 
 var removeElement = function (entityId, path, el) {
-  var childrenByPath = children[entityId]
+  var childrenByPath = children[entityId] || {}
   var childId = childrenByPath[path]
   var entityHandlers = handlers[entityId] || {}
   var removals = []
@@ -726,6 +731,7 @@ var removeElement = function (entityId, path, el) {
   forEach(removals, function (path) {
     delete children[entityId][path]
   })
+
   el.parentNode.removeChild(el)
   returnElement(el)
 }
@@ -907,8 +913,8 @@ var triggerUpdate = function (name, entity, args) {
  */
 
 var commitPendingChanges = function (entityId) {
-  entityState[entityId] = assign(entityState[entityId] || {}, pendingState[entityId])
-  entityProps[entityId] = assign(entityProps[entityId] || {}, pendingProps[entityId])
+  entityState[entityId] = assign(entityState[entityId] || {}, pendingState[entityId] || {})
+  entityProps[entityId] = assign(entityProps[entityId] || {}, pendingProps[entityId] || {})
   delete pendingState[entityId]
   delete pendingProps[entityId]
 }

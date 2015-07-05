@@ -2,7 +2,7 @@
 
 import assert from 'assert'
 import {dom,deku} from '../../'
-import {mount} from '../helpers'
+import {mount} from '../lib/helpers'
 import trigger from 'trigger-event'
 
 describe('key diffing', function () {

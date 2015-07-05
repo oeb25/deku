@@ -2,7 +2,7 @@
 
 import assert from 'assert'
 import {component,dom,deku} from '../../'
-import {mount,div} from '../helpers'
+import {mount,div} from '../lib/helpers'
 
 var Toggle = {
   render: function(component) {

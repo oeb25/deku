@@ -3,7 +3,7 @@
 import raf from 'component-raf'
 import assert from 'assert'
 import {dom,deku,render} from '../../'
-import {TwoWords,mount,div,Span} from '../helpers'
+import {TwoWords,mount,div,Span} from '../lib/helpers'
 
 it('should replace props on the app', function(){
   var app = deku()

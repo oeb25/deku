@@ -1,10 +1,13 @@
 require('es6-promise').polyfill()
-require("babelify/polyfill")
+require('babelify/polyfill')
+
+import {render,remove} from '../'
 
 describe('Client Rendering', function(){
 
   beforeEach(function(){
     this.el = document.createElement('div')
+    this.render = render(this.el)
     document.body.appendChild(this.el)
   })
 
@@ -32,6 +35,6 @@ describe('Client Rendering', function(){
   // require('./client/register')
 })
 
-describe('Server Renderer', function(){
-  // require('./server')
+describe('Server Rendering', function(){
+  require('./server')
 })

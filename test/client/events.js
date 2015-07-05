@@ -2,7 +2,7 @@
 
 import assert from 'assert'
 import {dom,deku,render} from '../../'
-import {mount,Span,div} from '../helpers'
+import {mount,Span,div} from '../lib/helpers'
 import trigger from 'trigger-event'
 import raf from 'component-raf'
 import classes from 'component-classes'
