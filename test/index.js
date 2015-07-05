@@ -12,6 +12,7 @@ describe('Client Rendering', function(){
   })
 
   afterEach(function(){
+    remove(this.el)
     document.body.removeChild(this.el)
   })
 

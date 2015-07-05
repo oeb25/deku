@@ -99,14 +99,6 @@ var setChildren = function (obj) {
 var updateChildren = compose(setChildren, mapObj(updateEntity), getChildren)
 
 /**
- * Remove all of the child entities of an entity
- *
- * @param {Entity} entity
- */
-
-var unmountChildren = compose(mapObj(removeEntity), getChildren)
-
-/**
  * Tell the container it's dirty and needs to re-render.
  */
 
@@ -176,10 +168,10 @@ var updateState = curry(function (entityId, nextState) {
  * Replace the props for an instance
  */
 
-var replaceProps = function (entityId, nextProps) {
-  pendingProps[entityId] = nextProps
+var replaceProps = curry(function (props, entityId, nextProps) {
+  props[entityId] = nextProps
   return entityId
-}
+})
 
 /**
  * Invalidate the container for an entity
@@ -196,7 +188,7 @@ var invalidateEntity = compose(scheduleFrame, clearFrame, getEntityContainer, ge
  * (EntityId, nextProps) -> void
  */
 
-var updateProps = compose(invalidateEntity, replaceProps)
+var updateProps = compose(invalidateEntity, replaceProps(pendingProps))
 
 /**
  * Add all of the DOM event listeners
@@ -300,6 +292,7 @@ var toComponent = function (entityId) {
  */
 
 var removeContainer = function (containerId) {
+  if (!containerId) return
   clearFrame(containerId)
   removeElement(containerId, '0', nativeElements[containerId])
   delete nativeElements[containerId]
@@ -348,7 +341,9 @@ var render = curry(function (node, vnode) {
   var containerId = getContainerByNode(node) || createContainer(node)
   var nativeElement = nativeElements[containerId]
   var virtualElement = getVirtualElement(containerId)
+
   clearFrame(containerId)
+
   if (!nativeElement) {
     nativeElement = toNative(containerId, '0', vnode)
     node.appendChild(nativeElement)
@@ -358,8 +353,10 @@ var render = curry(function (node, vnode) {
     }
     updateChildren(containerId)
   }
+
   nativeElements[containerId] = nativeElement
   virtualElements[containerId] = vnode
+
   flushMountQueue()
 })
 
@@ -387,12 +384,10 @@ var removeEntity = function (entityId) {
 }
 
 /**
- * Update a component.
+ * Update a component instance.
  *
  * - Commit any changes and re-render
  * - If the same virtual element is returned we skip diffing
- *
- * @param {String} entityId
  */
 
 var updateEntity = function (entityId) {
@@ -421,7 +416,7 @@ var updateEntity = function (entityId) {
 var toNativeComponent = function (parentId, path, vnode) {
   var component = vnode.type
   var entity = createEntity(path, component, parentId)
-  var initialProps = defaults(vnode.props, component.defaultProps)
+  var initialProps = defaults(vnode.attributes, component.defaultProps)
   var initialState = component.initialState ? component.initialState(initialProps) : {}
   children[parentId] = children[parentId] || {}
   children[parentId][path] = entity.id
@@ -688,10 +683,6 @@ var diffElement = function (path, entityId, prev, next, el) {
  * side effects:
  *   - removes element from the DOM
  *   - removes internal references
- *
- * @param {String} entityId
- * @param {String} path
- * @param {HTMLElement} el
  */
 
 var removeElement = function (entityId, path, el) {
@@ -739,13 +730,6 @@ var removeElement = function (entityId, path, el) {
 /**
  * Replace an element in the DOM. Removing all components
  * within that element and re-rendering the new virtual node.
- *
- * @param {Entity} entity
- * @param {String} path
- * @param {HTMLElement} el
- * @param {Object} vnode
- *
- * @return {void}
  */
 
 var replaceElement = function (entityId, path, el, vnode) {
@@ -786,11 +770,6 @@ var moveElement = curry(function (element, childEl, newPosition) {
 /**
  * Update all entities in a branch that have the same nativeElement. This
  * happens when a component has another component as it's root node.
- *
- * @param {String} entityId
- * @param {HTMLElement} newEl
- *
- * @return {void}
  */
 
 var updateEntityNativeElement = function (entityId, newEl) {
@@ -820,10 +799,6 @@ var handleEvent = curry(function (entityId, fn, e) {
 /**
  * Set the attribute of an element, performing additional transformations
  * dependning on the attribute name
- *
- * @param {HTMLElement} el
- * @param {String} name
- * @param {String} value
  */
 
 var setAttribute = function (entityId, path, el, name, value) {
@@ -852,10 +827,7 @@ var setAttribute = function (entityId, path, el, name, value) {
 
 /**
  * Remove an attribute, performing additional transformations
- * dependning on the attribute name
- *
- * @param {HTMLElement} el
- * @param {String} name
+ * depending on the attribute name
  */
 
 var removeAttribute = function (entityId, path, el, name) {
@@ -881,10 +853,6 @@ var removeAttribute = function (entityId, path, el, name) {
 
 /**
  * Trigger a hook on a component.
- *
- * @param {String} name Name of hook.
- * @param {Entity} entity The component instance.
- * @param {Array} args To pass along to hook.
  */
 
 var trigger = function (name, entity, args) {
@@ -895,12 +863,6 @@ var trigger = function (name, entity, args) {
 /**
  * Trigger a hook on the component and allow state to be
  * updated too.
- *
- * @param {String} name
- * @param {Object} entity
- * @param {Array} args
- *
- * @return {void}
  */
 
 var triggerUpdate = function (name, entity, args) {
@@ -940,19 +902,24 @@ var handleNativeEvent = function (event) {
 }
 
 /**
- * Render the entity and make sure it returns a node
- *
- * @param {Entity} entity
- *
- * @return {VirtualTree}
+ * Render the entity and make sure it returns a virtual element
  */
 
 var renderEntity = function (entity) {
-  var render = entity.type.render
-  if (!render) throw new Error('Component needs a render function')
-  var result = render(toComponent(entity.id), updateState(entity.id))
+  var component = entity.type
+  validateComponent(component)
+  var result = component.render(toComponent(entity.id), updateState(entity.id))
   if (!result) throw new Error('Render function must return an element.')
   return result
+}
+
+/**
+ * Validate a component definition
+ */
+
+var validateComponent = function (component) {
+  var name = component.name || 'Unnamed'
+  if (typeof component.render !== 'function') throw new Error(name + ' component needs a render function')
 }
 
 /**
@@ -1009,6 +976,23 @@ var inspectNode = curry(function (path, id) {
   }
   return node
 })
+
+/**
+ * Used for debugging composed functions
+ */
+
+var debug = function (val) {
+  debugger
+  return val
+}
+
+/**
+ * Remove all of the child entities of an entity
+ *
+ * @param {Entity} entity
+ */
+
+var unmountChildren = compose(mapObj(removeEntity), getChildren)
 
 /**
  * Render a virtual element to a DOM element container

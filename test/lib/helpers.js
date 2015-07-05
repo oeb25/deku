@@ -1,4 +1,7 @@
+/** @jsx element */
+
 import {render,remove} from '../../'
+import element from 'virtual-element'
 import assert from 'assert'
 
 /**
@@ -9,67 +12,62 @@ import assert from 'assert'
  * @param {Function} fn
  */
 
-exports.mount = function(app, fn, errorHandler) {
-  var el = document.createElement('div');
-
+exports.mount = function(vnode, fn, errorHandler) {
+  var el = document.createElement('div')
   try {
-    var renderer = render(app, el, { batching: false });
-    if (fn) fn(el, renderer);
+    render(el, vnode)
+    if (fn) fn(el)
   }
   catch(e) {
     if (errorHandler) {
-      errorHandler(e);
+      errorHandler(e)
     } else {
-      throw e;
+      throw e
     }
   }
   finally {
-    if (renderer) renderer.remove();
-    assert.equal(el.innerHTML, '');
-    if (el.parentNode) el.parentNode.removeChild(el);
+    remove(el)
+    assert.equal(el.innerHTML, '')
+    if (el.parentNode) el.parentNode.removeChild(el)
   }
-  return renderer;
-};
+}
 
 /**
  * Basic component for testing
  */
 
 exports.HelloWorld = {
-  render: function(component){
-    let {props, state} = component
-    return dom('span', null, ['Hello World']);
+  render: function ({ props, state }) {
+    return <span>Hello World</span>
   }
-};
+}
 
 /**
  * Create a span
  */
 
 exports.Span = {
-  render: function(component){
-    let {props, state} = component
-    return dom('span', null, [props.text]);
+  render: function ({ props, state }) {
+    return <span>{props.text}</span>
   }
-};
+}
 
 /**
  * Create a span with two words
  */
 
 exports.TwoWords = {
-  render: function(component){
-    let {props, state} = component
-    return dom('span', null, [props.one + ' ' + props.two]);
+  render: function ({ props, state }) {
+    return <span>{props.one} {props.two}</span>
   }
-};
+}
 
 /**
  * Create a div
  */
 
 exports.div = function(){
-  var el = document.createElement('div');
-  document.body.appendChild(el);
-  return el;
-};
+  var el = document.createElement('div')
+  document.body.appendChild(el)
+  return el
+}

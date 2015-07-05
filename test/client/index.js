@@ -1,10 +1,10 @@
-/** @jsx dom */
+/** @jsx element */
 
 import trigger from 'trigger-event'
 import Emitter from 'component-emitter'
 import raf from 'component-raf'
 import assert from 'assert'
-import dom from 'virtual-element'
+import element from 'virtual-element'
 import {render,remove} from '../../'
 import {HelloWorld,Span,TwoWords} from '../lib/helpers'
 import memoize from 'memoizee'
@@ -53,7 +53,7 @@ it('should render and remove a component', function(){
 
 it('should have initial state', function(){
   var DefaultState = {
-    initialState: function(props){
+    initialState: function (props) {
       return {
         text: 'Hello World',
         count: props.initialCount
@@ -76,19 +76,18 @@ it('should create a component with properties', function(){
     }
   }
   render(this.el, <Test text="Hello World" />)
-  assert.equal(el.innerHTML, '<span>Hello World</span>')
+  assert.equal(this.el.innerHTML, '<span>Hello World</span>')
   remove(this.el)
 })
 
-it('should compose components', function(){
+it.only('should compose components', function(){
   var Composed = {
     render: function(){
       return <HelloWorld />
     }
   }
-  render(this.el, <Composed />)
-  assert.equal(el.innerHTML, '<span>Hello World</span>')
-  remove(this.el)
+  this.render(<Composed />)
+  assert.equal(this.el.innerHTML, '<span>Hello World</span>')
 });
 
 it('should render a component using jsx', function(){
@@ -98,11 +97,11 @@ it('should render a component using jsx', function(){
     }
   }
   render(this.el, <Test />)
-  assert.equal(el.innerHTML, '<span class="yup">Hello World</span>')
+  assert.equal(this.el.innerHTML, '<span class="yup">Hello World</span>')
   remove(this.el)
 })
 
-it('should compose components and pass in props', function(){
+it('should compose components and pass in props', function () {
   var Composed = {
     render: function (component) {
       return <TwoWords one='Hello' two='World' />

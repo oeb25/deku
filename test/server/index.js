@@ -1,4 +1,4 @@
-/** @jsx dom */
+/** @jsx element */
 
 import assert from 'assert'
 import element from 'virtual-element'
