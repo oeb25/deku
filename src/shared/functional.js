@@ -23,3 +23,11 @@ exports.mapObj = curry(function (fn, obj) {
 exports.map = curry(function (fn, arr) {
   return arr.map(fn)
 })
+
+/**
+ * Get a property on an object
+ */
+
+exports.prop = curry(function (name, obj) {
+  return obj[name]
+})
