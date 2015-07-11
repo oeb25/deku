@@ -1,6 +1,6 @@
 var events = require('../shared/events')
 var nodeType = require('../shared/element').nodeType
-var defaults = require('../shared/defaults')
+var defaults = require('object-defaults')
 
 module.exports = render
 

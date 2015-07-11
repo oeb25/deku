@@ -3,7 +3,9 @@
  */
 
 var patch = function (prev, next) {
-  return diffNode('0', prev, next, [])
+  var changes = []
+  diffNode('0', prev, next, changes)
+  return changes
 }
 
 /**
@@ -11,16 +13,14 @@ var patch = function (prev, next) {
  */
 
 var diffNode = function (path, prev, next, changes) {
+  if (prev === next) {
+    return
+  }
   var nextType = nodeType(next)
   var prevType = nodeType(prev)
   if (nextType !== prevType) {
-    changes.push({
-      type: 'replace',
-      left: prev,
-      right: next,
-      path: path
-    })
-    return changes
+    replaceElement(path, prev, next, changes)
+    return
   }
   switch (nextType) {
     case 'text':
@@ -38,13 +38,8 @@ var diffNode = function (path, prev, next, changes) {
 
 var diffText = function (path, previous, current, changes) {
   if (current !== previous) {
-    changes.push({
-      type: 'text',
-      value: current,
-      path: path
-    })
+    replaceText(path, current)
   }
-  return changes
 }
 
 /**
@@ -52,80 +47,12 @@ var diffText = function (path, previous, current, changes) {
  */
 
 var diffChildren = function (path, prev, next, changes) {
-  var positions = []
   var leftKeys = getElementKeys(prev.children)
   var rightKeys = getElementKeys(next.children)
   var currentChildren = assign({}, children[entityId])
 
-  // Diff all of the nodes that have keys. This lets us re-used elements
-  // instead of overriding them and lets us move them around.
   if (!isEmpty(leftKeys) && !isEmpty(rightKeys)) {
-
-    // Removals
-    forEach(leftKeys, function (leftNode, key) {
-      if (rightKeys[key] == null) {
-        var leftPath = path + '.' + leftNode.index
-        removeNativeElement(
-          entityId,
-          leftPath,
-          childNodes[leftNode.index]
-        )
-      }
-    })
-
-    // Update nodes
-    forEach(rightKeys, function (rightNode, key) {
-      var leftNode = leftKeys[key]
-
-      // We only want updates for now
-      if (leftNode == null) return
-
-      var leftPath = path + '.' + leftNode.index
-
-      // Updated
-      positions[rightNode.index] = diffNode(
-        leftPath,
-        entityId,
-        leftNode,
-        rightNode,
-        childNodes[leftNode.index]
-      )
-    })
-
-    // Update the positions of all child components and event handlers
-    forEach(rightKeys, function (rightNode, key) {
-      var leftNode = leftKeys[key]
-
-      // We just want elements that have moved around
-      if (leftNode == null || leftNode.index === rightNode.index) return
-
-      var rightPath = path + '.' + rightNode.index
-      var leftPath = path + '.' + leftNode.index
-
-      // Update all the child component path positions to match
-      // the latest positions if they've changed. This is a bit hacky.
-      forEach(currentChildren, function (childId, childPath) {
-        if (leftPath === childPath) {
-          delete children[entityId][childPath]
-          children[entityId][rightPath] = childId
-        }
-      })
-    })
-
-    // Now add all of the new nodes last in case their path
-    // would have conflicted with one of the previous paths.
-    forEach(rightKeys, function (rightNode, key) {
-      var rightPath = path + '.' + rightNode.index
-      if (leftKeys[key] == null) {
-        positions[rightNode.index] = toNative(
-          containerId,
-          entityId,
-          rightPath,
-          rightNode
-        )
-      }
-    })
-
+    diffKeyedChildren(path, prev, next, changes)
   } else {
     var maxLength = Math.max(prev.children.length, next.children.length)
 
@@ -170,6 +97,58 @@ var diffChildren = function (path, prev, next, changes) {
       }
     }
   }
+}
+
+var diffKeyedChildren = function (path, prev, next, changes) {
+  var positions = []
+
+  // Removals
+  forEach(leftKeys, function (leftNode, key) {
+    if (rightKeys[key] == null) {
+      var leftPath = path + '.' + leftNode.index
+      removeNativeElement(
+        entityId,
+        leftPath,
+        childNodes[leftNode.index]
+      )
+    }
+  })
+
+  // Update nodes
+  forEach(rightKeys, function (rightNode, key) {
+    var leftNode = leftKeys[key]
+    if (leftNode == null) return
+    var leftPath = path + '.' + leftNode.index
+    positions[rightNode.index] = diffNode(leftPath, leftNode, rightNode, changes)
+  })
+
+  // Update the positions of all child components and event handlers
+  forEach(rightKeys, function (rightNode, key) {
+    var leftNode = leftKeys[key]
+    if (leftNode == null || leftNode.index === rightNode.index) return
+    var rightPath = path + '.' + rightNode.index
+    var leftPath = path + '.' + leftNode.index
+    forEach(currentChildren, function (childId, childPath) {
+      if (leftPath === childPath) {
+        delete children[entityId][childPath]
+        children[entityId][rightPath] = childId
+      }
+    })
+  })
+
+  // Now add all of the new nodes last in case their path
+  // would have conflicted with one of the previous paths.
+  forEach(rightKeys, function (rightNode, key) {
+    var rightPath = path + '.' + rightNode.index
+    if (leftKeys[key] == null) {
+      positions[rightNode.index] = toNative(
+        containerId,
+        entityId,
+        rightPath,
+        rightNode
+      )
+    }
+  })
 
   forEach(positions, moveElement(el))
 }
@@ -178,7 +157,7 @@ var diffChildren = function (path, prev, next, changes) {
  * Diff the attributes and add/remove them.
  */
 
-var diffAttributes = function (containerId, prev, next, el, entityId, path) {
+var diffAttributes = function (path, prev, next, changes) {
   var nextAttrs = next.attributes
   var prevAttrs = prev.attributes
 
@@ -205,21 +184,60 @@ var diffAttributes = function (containerId, prev, next, el, entityId, path) {
  * and replace it with the new component.
  */
 
-var diffComponent = function (containerId, path, entityId, prev, next, el) {
+var diffComponent = function (path, prev, next, changes) {
   var container = getContainer(containerId)
-  if (next.type !== prev.type) return replaceElement(containerId, entityId, path, el, next)
+  if (next.type !== prev.type) return replaceElement(path, prev, next, changes)
   updateProps(container.children[entityId][path], next.attributes)
   // TODO: We could update here straight away and skip looping through children later
-  return el
+  return changes
 }
 
 /**
  * Diff two element nodes.
  */
 
-var diffElement = function (containerId, path, entityId, prev, next, el) {
-  if (next.type !== prev.type) return replaceElement(containerId, entityId, path, el, next)
-  diffAttributes(containerId, prev, next, el, entityId, path)
-  diffChildren(containerId, path, entityId, prev, next, el)
-  return el
+var diffElement = function (path, prev, next, changes) {
+  if (next.type !== prev.type) return replaceElement(path, prev, next, changes)
+  diffAttributes(path, prev, next, changes)
+  diffChildren(path, prev, next, changes)
+  return changes
+}
+
+/**
+ * Replace an element
+ */
+
+function replaceElement (path, prev, next, changes) {
+  changes.push({
+    type: 'replace',
+    left: prev,
+    right: next,
+    path: path
+  })
+  return changes
+}
+
+/**
+ * Add a text change
+ */
+
+function replaceText (path, current) {
+  changes.push({
+    type: 'text',
+    value: current,
+    path: path
+  })
+  return changes
+}
+
+
+/**
+ * Group an array of virtual nodes using their keys
+ */
+
+exports.getElementKeys = function (arr) {
+  return arr.reduce(prev.children, function (acc, child) {
+    if (child && child.key != null) acc[child.key] = child
+    return acc
+  }, {})
 }

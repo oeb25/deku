@@ -24,8 +24,6 @@
   "dependencies": {
     "component-raf": "^1.2.0",
     "component-type": "^1.1.0",
-    "compose-function": "^2.0.0",
-    "curry": "^1.2.0",
     "dom-collection": "^1.0.2",
     "dom-pool": "^0.1.1",
     "dom-walk": "^0.1.1",
@@ -34,9 +32,10 @@
     "is-dom": "^1.0.5",
     "is-empty": "0.0.1",
     "is-promise": "^2.0.0",
+    "is-svg-attribute": "^1.0.2",
+    "is-svg-element": "^1.0.1",
     "object-defaults": "^0.1.0",
     "object-path": "^0.8.1",
-    "prop": "^0.1.1",
     "ramda": "^0.15.1"
   }
 }

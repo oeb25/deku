@@ -1,15 +1,17 @@
-var raf = require('component-raf')
-var isDom = require('is-dom')
+var tree = require('virtual-element-tree')
 var uid = require('get-uid')
-var defaults = require('../shared/defaults')
+var defaults = require('object-defaults')
 var forEach = require('fast.js/forEach')
 var assign = require('fast.js/object/assign')
+var indexOf = require('fast.js/array/indexOf')
 var reduce = require('fast.js/reduce')
 var isPromise = require('is-promise')
 var isEmpty = require('is-empty')
-var svg = require('../shared/svg')
-var events = require('../shared/events')
 var keypath = require('object-path')
+var dom = require('dom-collection')
+var events = require('../shared/events')
+var isSVGAttribute = require('is-svg-attribute')
+var svgNamespace = 'http://www.w3.org/2000/svg'
 
 /**
  * Virtual element functions
@@ -17,113 +19,39 @@ var keypath = require('object-path')
 
 var elementHelpers = require('../shared/element')
 var nodeType = elementHelpers.nodeType
-var getElementKeys = elementHelpers.getElementKeys
-
-/**
- * DOM pooling
- */
-
-var pool = require('./pool')
-var createElement = pool.createElement
-var returnElement = pool.returnElement
-
-/**
- * DOM functions
- */
-
-var dom = require('../shared/dom')
-var moveElement = dom.moveElement
-var getElementIndex = dom.getElementIndex
 
 /**
  * Path functions
  */
 
-var pathHelpers = require('../shared/path')
-var isRoot = pathHelpers.isRoot
-var isWithinPath = pathHelpers.isWithinPath
-
 /**
  * Functional helpers
  */
 
-var functional = require('../shared/functional')
-var curry = require('curry')
-var compose = require('compose-function')
-var mapObj = functional.mapObj
-var map = functional.map
-var prop = functional.prop
+var curry = require('ramda/src/curry')
+var prop = require('ramda/src/prop')
+var compose = require('ramda/src/compose')
+var mapObj = require('ramda/src/mapObj')
+var map = require('ramda/src/map')
 
 /**
- * Internal state
+ * Maybe merge two objects
  */
 
-var containers = {}
-var frames = {}
-var nativeHandlers = {}
-var entities = {}
-
-/**
- * Get a container DOM node using the reference id.
- */
-
-var getContainerById = function (id) {
-  return containers[id]
-}
-
-/**
- * Get the container ID given an element
- */
-
-var getContainerByNode = function (node) {
-  for (var id in containers) {
-    if (containers[id].node === node) return id
-  }
-}
-
-/**
- * Update all the children of an entity.
- *
- * (ContainerId) -> void
- */
-
-var updateChildren = function (container, entityId) {
-  mapObj(updateEntity, container.children[entityId])
-}
-
-/**
- * Tell the container it's dirty and needs to re-render.
- */
-
-var scheduleFrame = function (containerId) {
-  frames[containerId] = raf(function () {
-    render(getContainer(containerId), getVirtualElement(containerId))
-  })
-}
-
-/**
- * Clear the current scheduled frame
- */
-
-var clearFrame = function (containerId) {
-  var frameId = frames[containerId]
-  if (frameId) {
-    raf.cancel(frameId)
-    delete frames[containerId]
-  }
-  return containerId
+function merge (one, two) {
+  return assign(one || {}, two || {})
 }
 
 /**
  * Update the entity state using a promise
  */
 
-var updateState = function (container, entityId, nextState) {
+var updateState = curry(function (containerId, entity, nextState) {
   if (!nextState) return
-  if (isPromise(nextState)) return nextState.then(updateState(entityId))
-  container.pendingState[entityId] = assign(container.pendingState[entityId] || {}, nextState)
-  invalidate(container)
-}
+  if (isPromise(nextState)) return nextState.then(updateState(containerId, entity))
+  entity.pendingState = merge(entity.pendingState, nextState)
+  invalidate(getContainerById(containerId))
+})
 
 /**
  * Update an entity to match the latest rendered vode. We always
@@ -133,8 +61,8 @@ var updateState = function (container, entityId, nextState) {
  * (EntityId, nextProps) -> void
  */
 
-var updateProps = function (container, entityId, nextProps) {
-  container.pendingProps[entityId] = nextProps
+var updateProps = function (container, entity, nextProps) {
+  entity.pendingProps = nextProps
   invalidate(container)
 }
 
@@ -143,69 +71,10 @@ var updateProps = function (container, entityId, nextProps) {
  * (Container) -> void
  */
 
-var invalidate = compose(scheduleFrame, clearFrame)
-
-/**
- * Add all of the DOM event listeners
- */
-
-var addNativeEventListeners = function (container) {
-  var handler = nativeHandlers[container.id]
-  if (handler) return
-  handler = nativeHandlers[container.id] = handleNativeEvent(container)
-  forEach(events, function (eventType) {
-    document.body.addEventListener(eventType, handler, true)
-  })
+var invalidate = function (container) {
+  clearFrame(container.id)
+  scheduleFrame(bind(update, container), container.id)
 }
-
-/**
- * Add all of the DOM event listeners
- */
-
-var removeNativeEventListeners = function (container) {
-  var handler = nativeHandlers[container.id]
-  if (!handler) return
-  forEach(events, function (eventType) {
-    document.body.removeEventListener(eventType, handler, true)
-  })
-}
-
-/**
- * Get a handler for an entity
- */
-
-var getHandler = function (container, eventType, entityId, path) {
-  keypath.get(container.handlers, [entityId, path, eventType])
-}
-
-/**
- * Add an event handler for an entity at a path
- */
-
-var addHandler = function (container, eventType, entityId, path, fn) {
-  keypath.set(container.handlers, [entityId, path, eventType], fn)
-}
-
-/**
- * Remove a single event handler for an entity
- */
-
-var removeHandler = curry(function (containerId, eventType, entityId, path) {
-  var container = getContainer(containerId)
-  var args = [entityId]
-  if (path) args.push(path)
-  if (eventType) args.push(eventType)
-  keypath.del(container.handlers, args)
-})
-
-/**
- * Remove all event handlers for an entity
- */
-
-var removeAllHandlers = curry(function (containerId, entityId) {
-  var container = getContainer(containerId)
-  keypath.del(container.handlers, [entityId])
-})
 
 /**
  * Is an entity dirty and in need of a re-render?
@@ -215,9 +84,9 @@ var removeAllHandlers = curry(function (containerId, entityId) {
  * @return {Boolean}
  */
 
-var isDirty = curry(function (container, entityId) {
-  return entityId in container.pendingProps || entityId in container.pendingState
-})
+var isDirty = function (entity) {
+  return entity.pendingProps || entity.pendingState
+}
 
 /**
  * Get the component state
@@ -227,11 +96,11 @@ var isDirty = curry(function (container, entityId) {
  * @return {Object}
  */
 
-var toComponent = function (entityId) {
+var toComponent = function (entity) {
   return {
-    id: entityId,
-    props: entityProps[entityId],
-    state: entityState[entityId]
+    id: entity.id,
+    props: entity.props,
+    state: entity.state
   }
 }
 
@@ -240,110 +109,75 @@ var toComponent = function (entityId) {
  */
 
 var removeContainer = function (container) {
-  if (!container) return
-  clearFrame(containerId)
-  removeNativeEventListeners(containerId)
+  clearFrame(container.id)
   removeNativeElement(container, 'root', '0', container.nativeElement)
-  delete containers[containerId]
-}
-
-/**
- * Create a new container given an element
- */
-
-var createContainer = function (node) {
-  if (!isDom(node)) {
-    throw new TypeError('deku: Container element must be a DOM element')
-  }
-  if (getContainerByNode(node)) {
-    throw new Error('deku: You can\'t use the same element for multiple containers')
-  }
-  if (node.children.length > 0) {
-    console.info('deku: The container element is not empty. These elements will be removed. Read more: http://cl.ly/b0Sr')
-    node.innerHTML = ''
-  }
-  if (node === document.body) {
-    console.warn('deku: Using document.body is allowed but it can cause some issues. Read more: http://cl.ly/b0SC')
-  }
-  return {
-    id: uid(),
-    node: node,
-    children: {},
-    handlers: {},
-    nativeElements: {},
-    virtualElements: {},
-    entities: {},
-    props: {},
-    state: {},
-    pendingProps: {},
-    pendingState: {}
-  }
+  clearContainer(container)
 }
 
 /**
  * A component instance.
  */
 
-var createEntity = function (path, type, ownerId) {
+var createEntity = function (containerId, ownerId, path, type) {
   return {
     id: uid(),
     type: type,
     path: path,
-    ownerId: ownerId
+    ownerId: ownerId,
+    containerId: containerId
   }
 }
 
 /**
- * Render a vnode into a container
+ * Render a vnode into a container. If that container already exists
+ * we'll just perform an update.
  */
 
 var render = curry(function (node, vnode) {
   var container = getContainerByNode(node)
-
-  if (!container) {
-    container = createContainer(node)
-    addNativeEventListeners(container)
-    containers[container.id] = container
-  }
-
   var nativeElement = container.nativeElement
   var virtualElement = container.virtualElement
 
-  clearFrame(container.id)
+  clearFrame(container)
 
   if (!nativeElement) {
-    container.nativeElement = toNative(containerId, 'root', '0', vnode)
+    container.nativeElement = toNative(container, 'root', '0', vnode)
     node.appendChild(container.nativeElement)
+    flushMountQueue()
   } else {
-    if (virtualElement !== vnode) {
-      container.nativeElement = patch(container.id, virtualElement, vnode, nativeElement)
-    }
-    updateChildren(container.id, 'root')
+    update(container)
   }
-
-  flushMountQueue()
-  return container
 })
+
+var update = function (container) {
+  container.nativeElement = patch(container, container.virtualElement, container.virtualElement, container.nativeElement)
+  updateChildren(container)
+  flushMountQueue()
+}
 
 /**
  * Remove a component from the native dom.
  */
 
-var removeEntity = function (container, entityId) {
-  var entity = container.entities[entityId]
-  if (!entity) return
-  var nativeElement = container.nativeElements[entityId]
-  trigger('beforeUnmount', entity, [toComponent(entityId), nativeElement])
-  unmountChildren(container, entityId)
-  removeAllHandlers(container, entityId)
-  delete entities[entityId]
-  delete children[entityId]
-  delete pendingProps[entityId]
-  delete pendingState[entityId]
-  delete virtualElements[entityId]
-  delete nativeElements[entityId]
-  delete entityProps[entityId]
-  delete entityState[entityId]
+var removeEntity = function (container, path, entity) {
+  var nativeElement = entity.nativeElement
+  beforeUnmount(entity)
+  var branch = tree.prune(path, container.tree)
+  tree.climb(unmountChildren, branch)
+}
+
+/**
+ * Component hooks
+ */
+
+var afterMount = function (entity) {
+  if (!component.afterMount) return
+  component.afterMount(toComponent(entity), entity.nativeElement, updateState(entity))
+}
+
+var beforeUnmount = function (entity) {
+  if (!component.beforeUnmount) return
+  component.beforeUnmount(toComponent(entity), entity.nativeElement)
 }
 
 /**
@@ -353,9 +187,8 @@ var removeEntity = function (container, entityId) {
  * - If the same virtual element is returned we skip diffing
  */
 
-var updateEntity = function (entityId) {
-  var entity = entities[entityId]
-  var currentTree = virtualElements[entityId]
+var updateEntity = function (entity) {
+  var currentTree = entity.virtualElement
   var currentElement = nativeElements[entityId]
   var previousState = entity.state
   var previousProps = entity.props
@@ -377,7 +210,7 @@ var updateEntity = function (entityId) {
 
 var toNativeComponent = function (containerId, parentId, path, vnode) {
   var component = vnode.type
-  var entity = createEntity(path, component, parentId)
+  var entity = createEntity(containerId, parentId, path, component)
   var initialProps = defaults(vnode.attributes, component.defaultProps)
   var initialState = component.initialState ? component.initialState(initialProps) : {}
   container.children[parentId] = children[parentId] || {}
@@ -413,11 +246,11 @@ var toNative = function (containerId, entityId, path, vnode) {
  * Create a native element from a virtual element.
  */
 
-var toNativeElement = function (containerId, entityId, path, vnode) {
+var toNativeElement = function (container, entity, path, vnode) {
   var el = createElement(vnode.type)
   el.__entity__ = entityId
   el.__path__ = path
-  forEach(vnode.attributes, setAttribute(containerId, entityId, path, el))
+  forEach(vnode.attributes, setAttribute(container, entity, path, el))
   forEach(vnode.children, function (child, i) {
     if (child == null) return
     var childEl = toNative(containerId, entityId, path + '.' + i, child)
@@ -435,47 +268,10 @@ var toNativeElement = function (containerId, entityId, path, vnode) {
  *   - removes internal references
  */
 
-var removeNativeElement = function (containerId, entityId, path, el) {
-  var childrenByPath = children[entityId] || {}
-  var childId = childrenByPath[path]
-  var entityHandlers = handlers[entityId] || {}
-  var container = getContainer(containerId)
-  var removals = []
-
-  // If the path points to a component we should use that
-  // components element instead, because it might have moved it.
-  if (childId) {
-    el = nativeElements[childId]
-    removeEntity(containerId, childId)
-    removals.push(path)
-  } else {
-
-    // Just remove the text node
-    if (el.tagName) return el.parentNode.removeChild(el)
-
-    // Then we need to find any components within this
-    // branch and unmount them.
-    forEach(childrenByPath, function (childId, childPath) {
-      if (childPath === path || isWithinPath(path, childPath)) {
-        removeEntity(containerId, childId)
-        removals.push(childPath)
-      }
-    })
-
-    // Remove all events at this path or below it
-    forEach(entityHandlers, function (fn, handlerPath) {
-      if (handlerPath === path || isWithinPath(path, handlerPath)) {
-        removeHandler(containerId, entityId, handlerPath)
-      }
-    })
-  }
-
-  forEach(removals, function (path) {
-    delete container.children[entityId][path]
-  })
-
+var removeElement = function (container, entity, path, el) {
+  removeNestedComponents(container, entity, path)
+  removeNestedHandlers(container, path)
   el.parentNode.removeChild(el)
-  returnElement(el)
 }
 
 /**
@@ -483,22 +279,19 @@ var removeNativeElement = function (containerId, entityId, path, el) {
  * within that element and re-rendering the new virtual node.
  */
 
-var replaceElement = function (containerId, entityId, path, el, vnode) {
-  // remove the previous element and all nested components. This
-  // needs to happen before we create the new element so we don't
-  // get clashes on the component paths.
-  removeNativeElement(containerId, entityId, path, el)
-
-  // then add the new element in there
-  var newEl = toNative(containerId, entityId, path, vnode)
-  moveElement(parent, newEl, getElementIndex(el))
-
-  if (isRoot(path)) {
-    updateEntityNativeElement(containerId, entityId, newEl)
-  }
-
+var replaceElement = function (container, entity, path, el, vnode) {
+  removeNestedComponents(container, entity, path)
+  removeNestedHandlers(container, path)
+  var newEl = toNative(container, entity, path, vnode)
+  insertElement(newEl, indexOf(el, el.parentNode.children), parent)
+  updateEntityNativeElement(container, entity, newEl)
   return newEl
 }
+
+var unmountComponents = curry(function (container, _, path) {
+  if (nodeType(node) !== 'component') return
+  removeEntity(container, path, get(path, container.tree))
+})
 
 /**
  * Update all entities in a branch that have the same nativeElement. This
@@ -519,8 +312,7 @@ var updateEntityNativeElement = function (entityId, newEl) {
  * instead of relying on side-effects.
  */
 
-var handleEvent = curry(function (entityId, fn, e) {
-  var entity = getEntity(entityId)
+var handleEvent = curry(function (entity, fn, e) {
   if (entity) {
     var update = updateState(entityId)
     update(fn(e, toComponent(entityId), update))
@@ -534,9 +326,9 @@ var handleEvent = curry(function (entityId, fn, e) {
  * dependning on the attribute name
  */
 
-var setAttribute = function (containerId, entityId, path, el, value, name) {
+var setAttribute = function (container, entity, path, el, value, name) {
   if (events[name]) {
-    addHandler(containerId, events[name], entityId, path, handleEvent(entityId, value))
+    addHandler(container, events[name], entity.id, path, handleEvent(container, entity, value))
     return
   }
   switch (name) {
@@ -544,13 +336,14 @@ var setAttribute = function (containerId, entityId, path, el, value, name) {
     case 'disabled':
     case 'selected':
       el[name] = true
+      el.setAttribute(name, value)
       break
     case 'innerHTML':
     case 'value':
       el[name] = value
       break
-    case svg.isAttribute(name):
-      el.setAttributeNS(svg.namespace, name, value)
+    case isSVGAttribute(name):
+      el.setAttributeNS(svgNamespace, name, value)
       break
     default:
       el.setAttribute(name, value)
@@ -563,9 +356,9 @@ var setAttribute = function (containerId, entityId, path, el, value, name) {
  * depending on the attribute name
  */
 
-var removeAttribute = function (containerId, entityId, path, el, name) {
+var removeAttribute = function (container, entity, path, el, name) {
   if (events[name]) {
-    removeHandler(containerId, events[name], entityId, path)
+    removeHandler(container, events[name], entity.id, path)
     return
   }
   switch (name) {
@@ -573,6 +366,7 @@ var removeAttribute = function (containerId, entityId, path, el, name) {
     case 'disabled':
     case 'selected':
       el[name] = false
+      el.removeAttribute(name)
       break
     case 'innerHTML':
     case 'value':
@@ -590,28 +384,19 @@ var removeAttribute = function (containerId, entityId, path, el, name) {
 
 var trigger = function (name, entity, args) {
   if (typeof entity.type[name] !== 'function') return
-  return entity.type[name].apply(null, args)
-}
-
-/**
- * Trigger a hook on the component and allow state to be
- * updated too.
- */
-
-var triggerUpdate = function (name, entity, args) {
   args.push(updateState(entity.id))
-  updateState(entity.id, trigger(name, entity, args))
+  updateState(entity.id, entity.type[name].apply(null, args))
 }
 
 /**
  * Commit props and state changes to an entity.
  */
 
-var commitPendingChanges = function (entityId) {
-  entityState[entityId] = assign(entityState[entityId] || {}, pendingState[entityId] || {})
-  entityProps[entityId] = assign(entityProps[entityId] || {}, pendingProps[entityId] || {})
-  delete pendingState[entityId]
-  delete pendingProps[entityId]
+var commitPendingChanges = function (entity) {
+  entity.state = merge(entity.state, entity.pendingState)
+  entity.props = merge(entity.props, entity.pendingProps)
+  delete entity.pendingState
+  delete entity.pendingProps
 }
 
 /**
@@ -623,7 +408,6 @@ var commitPendingChanges = function (entityId) {
 var handleNativeEvent = curry(function (containerId, event) {
   var target = event.target
   var handler = getHandler(containerId, event.type)
-
   while (target) {
     var fn = handler(target.__entity__, target.__path__)
     if (fn) {
@@ -653,7 +437,9 @@ var renderEntity = function (entity) {
 
 var validateComponent = function (component) {
   var name = component.name || 'Unnamed'
-  if (typeof component.render !== 'function') throw new Error(name + ' component needs a render function')
+  if (typeof component.render !== 'function') {
+    throw new Error(name + ' component needs a render function')
+  }
 }
 
 /**
@@ -668,9 +454,7 @@ var shouldRender = function (entity) {
   if (!isDirty(entity)) return false
   var fn = entity.type.shouldRender || entity.type.shouldUpdate
   if (!fn) return true
-  var nextProps = pendingProps[entity.id]
-  var nextState = pendingState[entity.id]
-  return fn(toComponent(entity.id), nextProps, nextState)
+  return fn(toComponent(entity.id), entity.pendingProps, entity.pendingState)
 }
 
 /**
@@ -680,21 +464,26 @@ var shouldRender = function (entity) {
 
 var flushMountQueue = function () {
   while (mountQueue.length) {
-    var entityId = mountQueue.pop()
-    var entity = entities[entityId]
-    var nativeElement = nativeElements[entityId]
-    trigger('afterRender', entity, [toComponent(entity.id), nativeElement])
-    triggerUpdate('afterMount', entity, [toComponent(entity.id), nativeElement, updateState(entityId)])
+    var entity = mountQueue.pop()
+    trigger('afterRender', entity, [toComponent(entity.id), entity.nativeElement])
+    triggerUpdate('afterMount', entity, [toComponent(entity.id), entity.nativeElement, updateState(entityId)])
   }
 }
 
 /**
- * Remove all of the child entities of an entity
+ * Update all the children of an entity.
+ *
+ * (Entity) -> void
  */
 
-var unmountChildren = function (container, entityId) {
-  mapObj(removeEntity, container.children[entitiyId])
-}
+var updateChildren = compose(mapObj(updateEntity), prop('children'))
+
+/**
+ * Remove all of the child entities of an entity
+ * (Entity) -> void
+ */
+
+var removeAllChildren = compose(mapObj(removeEntity), prop('children'))
 
 /**
  * Render a virtual element to a DOM element container
@@ -735,3 +524,18 @@ exports.updateState = updateState
  */
 
 exports.updateProps = updateProps
+
+/**
+ * Move a DOM element to a new index within it's parent
+ */
+
+var moveElement = curry(function (element, newPosition, childEl) {
+  var target = element.childNodes[newPosition]
+  if (childEl !== target) {
+    if (target) {
+      element.insertBefore(childEl, target)
+    } else {
+      element.appendChild(childEl)
+    }
+  }
+})

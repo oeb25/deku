@@ -8,7 +8,22 @@ A library for creating UI components using virtual DOM as an alternative to [Rea
 npm install deku virtual-element
 ```
 
->  You can also use Duo, Bower or [download the files manually](https://github.com/dekujs/deku/releases).
+You can also use Duo, Bower or [download the files manually](https://github.com/dekujs/deku/releases).
+
+## Example
+
+```js
+import element from 'virtual-element'
+import {render} from 'deku'
+import MyButton from './button'
+
+// We're using our custom MyButton element
+render(document.body,
+  <div class="MyApp">
+    <MyButton>Hello World!</MyButton>
+  </div>
+)
+```
 
 ## Introduction
 

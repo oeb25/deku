@@ -39,7 +39,7 @@
 0.4.0 / 2015-05-22
 ==================
 
- * Fixed: Fixed issue with components rendered as root nodes. 
+ * Fixed: Fixed issue with components rendered as root nodes.
  * New: initialState now takes the props as a param
  * New: afterMount, afterRender and event handlers can now return a promise. This means you can use ES7 async functions to have pure lifecycle functions too.
  * New: You can nest propTypes now. Just set the `type` field to be another propTypes object.
@@ -244,7 +244,7 @@ Fixes
 0.0.29 / 2015-03-24
 ==================
 
- * Breaking change: Updated the scene/renderer API to allow for more powerful plugins. The Component API is now decoupled from the renderer. 
+ * Breaking change: Updated the scene/renderer API to allow for more powerful plugins. The Component API is now decoupled from the renderer.
  * Tests now using ES6
  * Fixed beforeMount not firing with renderString
  * Fixed innerHTML rendering with renderString
@@ -346,7 +346,7 @@ Fixes
 0.0.14 / 2015-01-21
 ==================
 
- * Add .send and .onMessage methods. You can call this.send(name, payload) within components and listen for those events on the scene with scene.onMessage(name, fn); 
+ * Add .send and .onMessage methods. You can call this.send(name, payload) within components and listen for those events on the scene with scene.onMessage(name, fn);
 
 0.0.13 / 2015-01-20
 ==================

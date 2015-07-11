@@ -21,8 +21,8 @@ $(src): node_modules
 $(tests): node_modules
 
 standalone: $(src)
-	@mkdir -p dist
-	@browserify --standalone deku src/index.js | bfc > dist/deku.js
+	@mkdir -p build
+	@browserify --standalone deku src/index.js | bfc > build/deku.js
 
 test: build
 	@duo-test browser --commands 'make build'
@@ -37,13 +37,13 @@ node_modules: package.json
 	@npm install
 
 clean:
-	@-rm -rf dist build.js node_modules
+	@-rm -rf build build.js node_modules
 
 lint: $(src)
 	standard src/**/*.js
 
 size: standalone
-	@minify dist/deku.js | gzip -9 | wc -c
+	@minify build/deku.js | gzip -9 | wc -c
 
 #
 # Releases.
