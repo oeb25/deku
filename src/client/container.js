@@ -1,118 +1,48 @@
+/*
+
+Containers are singleton objects for DOM nodes that we can render virtual
+elements into. This is an optimization so that when a new virtual element
+is rendered to the same DOM element we can just perform an update instead
+of blowing everything away. Hiding this implementation from the user means
+they don't need to worry about how it works, they can just render whenever
+they want and this is kept as an implementation detail.
+
+*/
+
 var isDom = require('is-dom')
+var Map = require('ez-map')
+var containers = new Map() // This could be a WeakMap
 
-/**
- * Internal state
- */
-
-var containers = {}
-var nativeHandlers = {}
-
-/**
- * Get a container for a given DOM node
- */
-
-exports.getContainer = function (node) {
-  return getContainerByNode(node) || createContainer(node)
-}
-
-/**
- * Get the container ID given an element
- */
-
-var getContainerByNode = function (node) {
-  for (var id in containers) {
-    if (containers[id].node === node) return id
+exports.create = function (node) {
+  var container = containers.get(node)
+  if (container) {
+    return container
   }
-}
-
-/**
- * Unmount a container
- */
-
-var unmount = function (container) {
-  removeNativeEventListeners(container)
-  delete containers[container.id]
-}
-
-/**
- * Create a new container given an element
- */
-
-var createContainer = function (node) {
   if (!isDom(node)) {
-    throw new TypeError('deku: Container element must be a DOM element')
+    throw new TypeError('Container element must be a DOM element')
   }
   if (node.children.length > 0) {
-    console.info('deku: The container element is not empty. These elements will be removed. Read more: http://cl.ly/b0Sr')
+    console.info('The container element is not empty. These elements will be removed. Read more: http://cl.ly/b0Sr')
     node.innerHTML = ''
   }
   if (node === document.body) {
-    console.warn('deku: Using document.body is allowed but it can cause some issues. Read more: http://cl.ly/b0SC')
+    console.warn('Using document.body is allowed but it can cause some issues. Read more: http://cl.ly/b0SC')
   }
   var container = {
     id: uid(),
     node: node,
-    handlers: {},
-    children: {}
+    children: {},
+    nativeElement: null,
+    virtualElement: null,
   }
-  containers[container.id] = container
-  addNativeEventListeners(container)
+  containers.set(node, container)
   return container
 }
 
-/**
- * Add all of the DOM event listeners
- */
-
-var addNativeEventListeners = function (container) {
-  forEach(events, function (eventType) {
-    document.body.addEventListener(eventType, handler, true)
-  })
+exports.get = function (node) {
+  return containers.get(node)
 }
 
-/**
- * Add all of the DOM event listeners
- */
-
-var removeNativeEventListeners = function (container) {
-  forEach(events, function (eventType) {
-    document.body.removeEventListener(eventType, handler, true)
-  })
+exports.remove = function (node) {
+  containers.delete(node)
 }
-
-/**
- * Get a handler for an entity
- */
-
-var getHandler = function (container, eventType, entityId, path) {
-  keypath.get(container.handlers, [entityId, path, eventType])
-}
-
-/**
- * Add an event handler for an entity at a path
- */
-
-var addHandler = function (container, eventType, entityId, path, fn) {
-  keypath.set(container.handlers, [entityId, path, eventType], fn)
-}
-
-/**
- * Remove a single event handler for an entity
- */
-
-var removeHandler = curry(function (containerId, eventType, entityId, path) {
-  var container = getContainer(containerId)
-  var args = [entityId]
-  if (path) args.push(path)
-  if (eventType) args.push(eventType)
-  keypath.del(container.handlers, args)
-})
-
-/**
- * Remove all event handlers for an entity
- */
-
-var removeAllHandlers = curry(function (containerId, entityId) {
-  var container = getContainer(containerId)
-  keypath.del(container.handlers, [entityId])
-})

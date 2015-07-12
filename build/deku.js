@@ -71,84 +71,314 @@ module.exports = function(val){
 };
 
 },{}],3:[function(_require,module,exports){
-function Pool(params) {
-    if (typeof params !== 'object') {
-        throw new Error("Please pass parameters. Example -> new Pool({ tagName: \"div\" })");
-    }
+var slice = Array.prototype.slice;
+var toArray = function(a){ return slice.call(a) }
+var tail = function(a){ return slice.call(a, 1) }
 
-    if (typeof params.tagName !== 'string') {
-        throw new Error("Please specify a tagName. Example -> new Pool({ tagName: \"div\" })");
-    }
+// fn, [value] -> fn
+//-- create a curried function, incorporating any number of
+//-- pre-existing arguments (e.g. if you're further currying a function).
+var createFn = function(fn, args, totalArity){
+    var remainingArity = totalArity - args.length;
 
-    this.storage = [];
-    this.tagName = params.tagName.toLowerCase();
-    this.namespace = params.namespace;
+    switch (remainingArity) {
+        case 0: return function(){ return processInvocation(fn, concatArgs(args, arguments), totalArity) };
+        case 1: return function(a){ return processInvocation(fn, concatArgs(args, arguments), totalArity) };
+        case 2: return function(a,b){ return processInvocation(fn, concatArgs(args, arguments), totalArity) };
+        case 3: return function(a,b,c){ return processInvocation(fn, concatArgs(args, arguments), totalArity) };
+        case 4: return function(a,b,c,d){ return processInvocation(fn, concatArgs(args, arguments), totalArity) };
+        case 5: return function(a,b,c,d,e){ return processInvocation(fn, concatArgs(args, arguments), totalArity) };
+        case 6: return function(a,b,c,d,e,f){ return processInvocation(fn, concatArgs(args, arguments), totalArity) };
+        case 7: return function(a,b,c,d,e,f,g){ return processInvocation(fn, concatArgs(args, arguments), totalArity) };
+        case 8: return function(a,b,c,d,e,f,g,h){ return processInvocation(fn, concatArgs(args, arguments), totalArity) };
+        case 9: return function(a,b,c,d,e,f,g,h,i){ return processInvocation(fn, concatArgs(args, arguments), totalArity) };
+        case 10: return function(a,b,c,d,e,f,g,h,i,j){ return processInvocation(fn, concatArgs(args, arguments), totalArity) };
+        default: return createEvalFn(fn, args, remainingArity);
+    }
 }
 
-Pool.prototype.push = function(el) {
-    if (el.tagName.toLowerCase() !== this.tagName) {
-        return;
-    }
-    
-    this.storage.push(el);
-};
-
-Pool.prototype.pop = function(argument) {
-    if (this.storage.length === 0) {
-        return this.create();
-    } else {
-        return this.storage.pop();
-    }
-};
-
-Pool.prototype.create = function() {
-    if (this.namespace) {
-        return document.createElementNS(this.namespace, this.tagName);
-    } else {
-        return document.createElement(this.tagName);
-    }
-};
-
-Pool.prototype.allocate = function(size) {
-    if (this.storage.length >= size) {
-        return;
-    }
-
-    var difference = size - this.storage.length;
-    for (var poolAllocIter = 0; poolAllocIter < difference; poolAllocIter++) {
-        this.storage.push(this.create());
-    }
-};
-
-if (typeof module !== 'undefined' && typeof module.exports !== 'undefined') {
-    module.exports = Pool;
+// [value], arguments -> [value]
+//-- concat new arguments onto old arguments array
+var concatArgs = function(args1, args2){
+    return args1.concat(toArray(args2));
 }
+
+// fn, [value], int -> fn
+//-- create a function of the correct arity by the use of eval,
+//-- so that curry can handle functions of any arity
+var createEvalFn = function(fn, args, arity){
+    var argList = makeArgList(arity);
+
+    //-- hack for IE's faulty eval parsing -- http://stackoverflow.com/a/6807726
+    var fnStr = 'false||' +
+                'function(' + argList + '){ return processInvocation(fn, concatArgs(args, arguments)); }';
+    return eval(fnStr);
+}
+
+var makeArgList = function(len){
+    var a = [];
+    for ( var i = 0; i < len; i += 1 ) a.push('a' + i.toString());
+    return a.join(',');
+}
+
+var trimArrLength = function(arr, length){
+    if ( arr.length > length ) return arr.slice(0, length);
+    else return arr;
+}
+
+// fn, [value] -> value
+//-- handle a function being invoked.
+//-- if the arg list is long enough, the function will be called
+//-- otherwise, a new curried version is created.
+var processInvocation = function(fn, argsArr, totalArity){
+    argsArr = trimArrLength(argsArr, totalArity);
+
+    if ( argsArr.length === totalArity ) return fn.apply(null, argsArr);
+    return createFn(fn, argsArr, totalArity);
+}
+
+// fn -> fn
+//-- curries a function! <3
+var curry = function(fn){
+    return createFn(fn, [], fn.length);
+}
+
+// num, fn -> fn
+//-- curries a function to a certain arity! <33
+curry.to = curry(function(arity, fn){
+    return createFn(fn, [], arity);
+});
+
+// num, fn -> fn
+//-- adapts a function in the context-first style
+//-- to a curried version. <3333
+curry.adaptTo = curry(function(num, fn){
+    return curry.to(num, function(context){
+        var args = tail(arguments).concat(context);
+        return fn.apply(this, args);
+    });
+})
+
+// fn -> fn
+//-- adapts a function in the context-first style to
+//-- a curried version. <333
+curry.adapt = function(fn){
+    return curry.adaptTo(fn.length, fn)
+}
+
+
+module.exports = curry;
 
 },{}],4:[function(_require,module,exports){
-var slice = Array.prototype.slice
+/**
+ * Dependencies
+ */
 
-module.exports = iterativelyWalk
+var isArray = Array.isArray
 
-function iterativelyWalk(nodes, cb) {
-    if (!('length' in nodes)) {
-        nodes = [nodes]
-    }
-    
-    nodes = slice.call(nodes)
+/**
+ * Initialize `EzMap`.
+ *
+ * @constructor
+ * @param {array} [arr]
+ *
+ * @api public
+ */
 
-    while(nodes.length) {
-        var node = nodes.shift(),
-            ret = cb(node)
-
-        if (ret) {
-            return ret
-        }
-
-        if (node.childNodes && node.childNodes.length) {
-            nodes = slice.call(node.childNodes).concat(nodes)
-        }
-    }
+function EzMap(arr) {
+  this._keys   = []
+  this._values = []
+  if (isArray(arr) && arr.length)
+    this._initial(arr)
 }
+
+/**
+ * Set initial entries.
+ *
+ * @param  {array} arr
+ * @return {void}
+ *
+ * @api private
+ */
+
+EzMap.prototype._initial = function(arr) {
+  var self = this
+  arr.forEach(function(entry) {
+    var key   = entry[0]
+    var value = entry[1]
+    self._keys.push(key)
+    self._values.push(value)
+  })
+}
+
+/**
+ * Get the index of `key`.
+ *
+ * @param  {mixed} key
+ * @return {number}
+ *
+ * @api private
+ */
+
+EzMap.prototype._index = function(key) {
+  return this._keys.indexOf(key)
+}
+
+/**
+ * Set an entry.
+ *
+ * @param  {mixed} key
+ * @param  {mixed} [value]
+ * @return {this}
+ *
+ * @api public
+ */
+
+EzMap.prototype.set = function(key, value) {
+  var index = this._index(key)
+  if (index < 0) index = this._keys.length
+  this._keys[index]   = key
+  this._values[index] = value
+  return this
+}
+
+/**
+ * Check if `key` is an entry.
+ *
+ * @param  {mixed} key
+ * @return {boolean}
+ *
+ * @api public
+ */
+
+EzMap.prototype.has = function(key) {
+  return this._index(key) >= 0
+}
+
+/**
+ * Get an entry.
+ *
+ * @param  {mixed} key
+ * @return {mixed}
+ *
+ * @api public
+ */
+
+EzMap.prototype.get = function(key) {
+  var index = this._index(key)
+  if (index >= 0) return this._values[index]
+}
+
+/**
+ * Get the keys of all entries.
+ *
+ * @return {array}
+ *
+ * @api public
+ */
+
+EzMap.prototype.keys = function() {
+  return this._keys
+}
+
+/**
+ * Get the values of all entries.
+ *
+ * @return {array}
+ *
+ * @api public
+ */
+
+EzMap.prototype.values = function() {
+  return this._values
+}
+
+/**
+ * Get all entries.
+ *
+ * @return {array}
+ *
+ * @api public
+ */
+
+EzMap.prototype.entries = function() {
+  var keys    = this._keys
+  var values  = this._values
+  var entries = []
+  keys.forEach(function(_, index) {
+    entries.push([keys[index], values[index]])
+  })
+  return entries
+}
+
+/**
+ * Get the size of all entries.
+ *
+ * @return {number}
+ *
+ * @api public
+ */
+
+EzMap.prototype.size = function() {
+  return this.entries().length
+}
+
+/**
+ * Iterate over all entries with `iterator`.
+ *
+ * @param  {function} iterator
+ * @return {void}
+ *
+ * @api public
+ */
+
+EzMap.prototype.forEach = function(iterator) {
+  var entries = this.entries()
+  var context = this
+  entries.forEach(function(entry) {
+    var key   = entry[0]
+    var value = entry[1]
+    iterator(value, key, context)
+  })
+}
+
+/**
+ * Delete an entry.
+ *
+ * @param  {mixed} key
+ * @return {boolean}
+ *
+ * @api public
+ */
+
+EzMap.prototype['delete'] = function(key) {
+  var index = this._index(key)
+  if (index >= 0) {
+    this._keys.splice(index, 1)
+    this._values.splice(index, 1)
+    return true
+  }
+  return false
+}
+
+/**
+ * Clear all entries.
+ *
+ * @return {void}
+ *
+ * @api public
+ */
+
+EzMap.prototype.clear = function() {
+  this._keys.length   = 0
+  this._values.length = 0
+}
+
+/**
+ * Exports
+ */
+
+module.exports = EzMap
 
 },{}],5:[function(_require,module,exports){
 'use strict';
@@ -173,7 +403,42 @@ module.exports = function fastForEach (subject, fn, thisContext) {
   }
 };
 
-},{"../function/bindInternal3":8}],6:[function(_require,module,exports){
+},{"../function/bindInternal3":9}],6:[function(_require,module,exports){
+'use strict';
+
+/**
+ * # Index Of
+ *
+ * A faster `Array.prototype.indexOf()` implementation.
+ *
+ * @param  {Array}  subject   The array (or array-like) to search within.
+ * @param  {mixed}  target    The target item to search for.
+ * @param  {Number} fromIndex The position to start searching from, if known.
+ * @return {Number}           The position of the target in the subject, or -1 if it does not exist.
+ */
+module.exports = function fastIndexOf (subject, target, fromIndex) {
+  var length = subject.length,
+      i = 0;
+
+  if (typeof fromIndex === 'number') {
+    i = fromIndex;
+    if (i < 0) {
+      i += length;
+      if (i < 0) {
+        i = 0;
+      }
+    }
+  }
+
+  for (; i < length; i++) {
+    if (subject[i] === target) {
+      return i;
+    }
+  }
+  return -1;
+};
+
+},{}],7:[function(_require,module,exports){
 'use strict';
 
 var bindInternal4 = _require('../function/bindInternal4');
@@ -210,7 +475,7 @@ module.exports = function fastReduce (subject, fn, initialValue, thisContext) {
   return result;
 };
 
-},{"../function/bindInternal4":9}],7:[function(_require,module,exports){
+},{"../function/bindInternal4":10}],8:[function(_require,module,exports){
 'use strict';
 
 var forEachArray = _require('./array/forEach'),
@@ -233,7 +498,7 @@ module.exports = function fastForEach (subject, fn, thisContext) {
     return forEachObject(subject, fn, thisContext);
   }
 };
-},{"./array/forEach":5,"./object/forEach":11}],8:[function(_require,module,exports){
+},{"./array/forEach":5,"./object/forEach":12}],9:[function(_require,module,exports){
 'use strict';
 
 /**
@@ -246,7 +511,7 @@ module.exports = function bindInternal3 (func, thisContext) {
   };
 };
 
-},{}],9:[function(_require,module,exports){
+},{}],10:[function(_require,module,exports){
 'use strict';
 
 /**
@@ -259,7 +524,7 @@ module.exports = function bindInternal4 (func, thisContext) {
   };
 };
 
-},{}],10:[function(_require,module,exports){
+},{}],11:[function(_require,module,exports){
 'use strict';
 
 /**
@@ -295,7 +560,7 @@ module.exports = function fastAssign (target) {
   return target;
 };
 
-},{}],11:[function(_require,module,exports){
+},{}],12:[function(_require,module,exports){
 'use strict';
 
 var bindInternal3 = _require('../function/bindInternal3');
@@ -320,7 +585,7 @@ module.exports = function fastForEachObject (subject, fn, thisContext) {
   }
 };
 
-},{"../function/bindInternal3":8}],12:[function(_require,module,exports){
+},{"../function/bindInternal3":9}],13:[function(_require,module,exports){
 'use strict';
 
 var bindInternal4 = _require('../function/bindInternal4');
@@ -359,7 +624,7 @@ module.exports = function fastReduceObject (subject, fn, initialValue, thisConte
   return result;
 };
 
-},{"../function/bindInternal4":9}],13:[function(_require,module,exports){
+},{"../function/bindInternal4":10}],14:[function(_require,module,exports){
 'use strict';
 
 var reduceArray = _require('./array/reduce'),
@@ -384,14 +649,14 @@ module.exports = function fastReduce (subject, fn, initialValue, thisContext) {
     return reduceObject(subject, fn, initialValue, thisContext);
   }
 };
-},{"./array/reduce":6,"./object/reduce":12}],14:[function(_require,module,exports){
+},{"./array/reduce":7,"./object/reduce":13}],15:[function(_require,module,exports){
 /** generate unique id for selector */
 var counter = Date.now() % 1e9;
 
 module.exports = function getUid(){
 	return (Math.random() * 1e9 >>> 0) + (counter++);
 };
-},{}],15:[function(_require,module,exports){
+},{}],16:[function(_require,module,exports){
 /*global window*/
 
 /**
@@ -408,7 +673,7 @@ module.exports = function isNode(val){
   return 'number' == typeof val.nodeType && 'string' == typeof val.nodeName;
 }
 
-},{}],16:[function(_require,module,exports){
+},{}],17:[function(_require,module,exports){
 
 /**
  * Expose `isEmpty`.
@@ -438,14 +703,94 @@ function isEmpty (val) {
   for (var key in val) if (has.call(val, key)) return false;
   return true;
 }
-},{}],17:[function(_require,module,exports){
+},{}],18:[function(_require,module,exports){
 module.exports = isPromise;
 
 function isPromise(obj) {
   return obj && (typeof obj === 'object' || typeof obj === 'function') && typeof obj.then === 'function';
 }
 
-},{}],18:[function(_require,module,exports){
+},{}],19:[function(_require,module,exports){
+/**
+ * Supported SVG attributes
+ */
+
+exports.attributes = {
+  'cx': true,
+  'cy': true,
+  'd': true,
+  'dx': true,
+  'dy': true,
+  'fill': true,
+  'fillOpacity': true,
+  'fontFamily': true,
+  'fontSize': true,
+  'fx': true,
+  'fy': true,
+  'gradientTransform': true,
+  'gradientUnits': true,
+  'markerEnd': true,
+  'markerMid': true,
+  'markerStart': true,
+  'offset': true,
+  'opacity': true,
+  'patternContentUnits': true,
+  'patternUnits': true,
+  'points': true,
+  'preserveAspectRatio': true,
+  'r': true,
+  'rx': true,
+  'ry': true,
+  'spreadMethod': true,
+  'stopColor': true,
+  'stopOpacity': true,
+  'stroke': true,
+  'strokeDasharray': true,
+  'strokeLinecap': true,
+  'strokeOpacity': true,
+  'strokeWidth': true,
+  'textAnchor': true,
+  'transform': true,
+  'version': true,
+  'viewBox': true,
+  'x1': true,
+  'x2': true,
+  'x': true,
+  'y1': true,
+  'y2': true,
+  'y': true
+}
+
+/**
+ * Are element's attributes SVG?
+ *
+ * @param {String} attr
+ */
+
+module.exports = function (attr) {
+  return attr in exports.attributes
+}
+
+},{}],20:[function(_require,module,exports){
+'use strict'
+
+module.exports = function(target) {
+  target = target || {}
+
+  for (var i = 1; i < arguments.length; i++) {
+    var source = arguments[i]
+    if (!source) continue
+
+    Object.getOwnPropertyNames(source).forEach(function(key) {
+      if (undefined === target[key])
+        target[key] = source[key]
+    })
+  }
+
+  return target
+}
+
+},{}],21:[function(_require,module,exports){
 (function (root, factory){
   'use strict';
 
@@ -716,7 +1061,7 @@ function isPromise(obj) {
   return objectPath;
 });
 
-},{}],19:[function(_require,module,exports){
+},{}],22:[function(_require,module,exports){
 var _curry2 = _require('./internal/_curry2');
 
 
@@ -765,7 +1110,7 @@ module.exports = _curry2(function(n, fn) {
   }
 });
 
-},{"./internal/_curry2":27}],20:[function(_require,module,exports){
+},{"./internal/_curry2":27}],23:[function(_require,module,exports){
 var _curry2 = _require('./internal/_curry2');
 var arity = _require('./arity');
 
@@ -791,42 +1136,7 @@ module.exports = _curry2(function bind(fn, thisObj) {
   });
 });
 
-},{"./arity":19,"./internal/_curry2":27}],21:[function(_require,module,exports){
-var _compose = _require('./internal/_compose');
-var _createComposer = _require('./internal/_createComposer');
-
-
-/**
- * Creates a new function that runs each of the functions supplied as parameters in turn,
- * passing the return value of each function invocation to the next function invocation,
- * beginning with whatever arguments were passed to the initial invocation.
- *
- * Note that `compose` is a right-associative function, which means the functions provided
- * will be invoked in order from right to left. In the example `var h = compose(f, g)`,
- * the function `h` is equivalent to `f( g(x) )`, where `x` represents the arguments
- * originally passed to `h`.
- *
- * @func
- * @memberOf R
- * @category Function
- * @sig ((y -> z), (x -> y), ..., (b -> c), (a... -> b)) -> (a... -> z)
- * @param {...Function} functions A variable number of functions.
- * @return {Function} A new function which represents the result of calling each of the
- *         input `functions`, passing the result of each function call to the next, from
- *         right to left.
- * @example
- *
- *      var triple = function(x) { return x * 3; };
- *      var double = function(x) { return x * 2; };
- *      var square = function(x) { return x * x; };
- *      var squareThenDoubleThenTriple = R.compose(triple, double, square);
- *
- *      //≅ triple(double(square(5)))
- *      squareThenDoubleThenTriple(5); //=> 150
- */
-module.exports = _createComposer(_compose);
-
-},{"./internal/_compose":24,"./internal/_createComposer":25}],22:[function(_require,module,exports){
+},{"./arity":22,"./internal/_curry2":27}],24:[function(_require,module,exports){
 var _curry1 = _require('./internal/_curry1');
 var curryN = _require('./curryN');
 
@@ -877,7 +1187,7 @@ module.exports = _curry1(function curry(fn) {
   return curryN(fn.length, fn);
 });
 
-},{"./curryN":23,"./internal/_curry1":26}],23:[function(_require,module,exports){
+},{"./curryN":25,"./internal/_curry1":26}],25:[function(_require,module,exports){
 var _curry2 = _require('./internal/_curry2');
 var _curryN = _require('./internal/_curryN');
 var arity = _require('./arity');
@@ -930,57 +1240,7 @@ module.exports = _curry2(function curryN(length, fn) {
   return arity(length, _curryN(length, [], fn));
 });
 
-},{"./arity":19,"./internal/_curry2":27,"./internal/_curryN":28}],24:[function(_require,module,exports){
-/**
- * Basic, right-associative composition function. Accepts two functions and returns the
- * composite function; this composite function represents the operation `var h = f(g(x))`,
- * where `f` is the first argument, `g` is the second argument, and `x` is whatever
- * argument(s) are passed to `h`.
- *
- * This function's main use is to build the more general `compose` function, which accepts
- * any number of functions.
- *
- * @private
- * @category Function
- * @param {Function} f A function.
- * @param {Function} g A function.
- * @return {Function} A new function that is the equivalent of `f(g(x))`.
- * @example
- *
- *      var double = function(x) { return x * 2; };
- *      var square = function(x) { return x * x; };
- *      var squareThenDouble = _compose(double, square);
- *
- *      squareThenDouble(5); //≅ double(square(5)) => 50
- */
-module.exports = function _compose(f, g) {
-  return function() {
-    return f.call(this, g.apply(this, arguments));
-  };
-};
-
-},{}],25:[function(_require,module,exports){
-var arity = _require('../arity');
-
-
-/*
- * Returns a function that makes a multi-argument version of compose from
- * either _compose or _composeP.
- */
-module.exports = function _createComposer(composeFunction) {
-  return function() {
-    var fn = arguments[arguments.length - 1];
-    var length = fn.length;
-    var idx = arguments.length - 2;
-    while (idx >= 0) {
-      fn = composeFunction(arguments[idx], fn);
-      idx -= 1;
-    }
-    return arity(length, fn);
-  };
-};
-
-},{"../arity":19}],26:[function(_require,module,exports){
+},{"./arity":22,"./internal/_curry2":27,"./internal/_curryN":28}],26:[function(_require,module,exports){
 /**
  * Optimized internal two-arity curry function.
  *
@@ -1075,7 +1335,7 @@ module.exports = function _curryN(length, received, fn) {
   };
 };
 
-},{"../arity":19}],29:[function(_require,module,exports){
+},{"../arity":22}],29:[function(_require,module,exports){
 module.exports = function _has(prop, obj) {
   return Object.prototype.hasOwnProperty.call(obj, prop);
 };
@@ -1157,7 +1417,7 @@ module.exports = (function() {
   };
 })();
 
-},{"../bind":20,"../isArrayLike":33,"./_xwrap":32}],32:[function(_require,module,exports){
+},{"../bind":23,"../isArrayLike":33,"./_xwrap":32}],32:[function(_require,module,exports){
 module.exports = (function() {
   function XWrap(fn) {
     this.f = fn;
@@ -1312,256 +1572,272 @@ module.exports = _curry2(function mapObject(fn, obj) {
 });
 
 },{"./internal/_curry2":27,"./internal/_reduce":31,"./keys":34}],36:[function(_require,module,exports){
-var raf = _require('component-raf')
-var isDom = _require('is-dom')
-var uid = _require('get-uid')
-var defaults = _require('../shared/defaults')
-var forEach = _require('fast.js/forEach')
-var assign = _require('fast.js/object/assign')
-var reduce = _require('fast.js/reduce')
-var isPromise = _require('is-promise')
-var curry = _require('ramda/src/curry')
-var compose = _require('ramda/src/compose')
-var mapObj = _require('ramda/src/mapObj')
-var isEmpty = _require('is-empty')
-var pool = _require('./pool')
-var svg = _require('../shared/svg')
-var pathHelpers = _require('../shared/path')
-var events = _require('../shared/events')
-var elementHelpers = _require('../shared/element')
-var keypath = _require('object-path')
-var nodeType = elementHelpers.nodeType
-var createElement = pool.createElement
-var returnElement = pool.returnElement
-var isRoot = pathHelpers.isRoot
-var isWithinPath = pathHelpers.isWithinPath
-var handlers = {}
-var containers = {}
-var pendingProps = {}
-var pendingState = {}
-var entities = {}
-var mountQueue = []
-var children = {}
-var frames = {}
-var nativeElements = {}
-var virtualElements = {}
-var entityState = {}
-var entityProps = {}
-var inProgress = {}
+var _curry2 = _require('./internal/_curry2');
+
 
 /**
- * Get the container ID given an element
+ * Returns a function that when supplied an object returns the indicated property of that object, if it exists.
  *
- * @param {HTMLElement} node
+ * @func
+ * @memberOf R
+ * @category Object
+ * @sig s -> {s: a} -> a
+ * @param {String} p The property name
+ * @param {Object} obj The object to query
+ * @return {*} The value at `obj.p`.
+ * @example
  *
- * @return {String}
+ *      R.prop('x', {x: 100}); //=> 100
+ *      R.prop('x', {}); //=> undefined
+ */
+module.exports = _curry2(function prop(p, obj) { return obj[p]; });
+
+},{"./internal/_curry2":27}],37:[function(_require,module,exports){
+var isDom = _require('is-dom')
+var Map = _require('ez-map')
+var containers = new Map()
+
+/**
+ * Create a new container. If a container already exists for a node,
+ * that will be returned instead.
  */
 
-var getContainerByNode = function (node) {
-  for (var id in containers) {
-    if (containers[id] === node) return id
+exports.create = function (node) {
+  var container = containers.get(node)
+  if (container) {
+    return container
+  }
+  if (!isDom(node)) {
+    throw new TypeError('Container element must be a DOM element')
+  }
+  if (node.children.length > 0) {
+    console.info('The container element is not empty. These elements will be removed. Read more: http://cl.ly/b0Sr')
+    node.innerHTML = ''
+  }
+  if (node === document.body) {
+    console.warn('Using document.body is allowed but it can cause some issues. Read more: http://cl.ly/b0SC')
+  }
+  var container = {
+    id: uid(),
+    node: node,
+    children: {},
+    nativeElement: null,
+    virtualElement: null,
+  }
+  containers.set(node, container)
+  return container
+}
+
+exports.get = function (node) {
+  return containers.get(node)
+}
+
+exports.remove = function (node) {
+  containers.delete(node)
+}
+
+},{"ez-map":4,"is-dom":16}],38:[function(_require,module,exports){
+/**
+ * Move a DOM element to a new index within it's parent
+ */
+
+exports.insertAt = function (element, newPosition, childEl) {
+  var target = element.childNodes[newPosition]
+  if (childEl !== target) {
+    if (target) {
+      element.insertBefore(childEl, target)
+    } else {
+      element.appendChild(childEl)
+    }
   }
 }
 
-/**
- * Get a virtual element using the reference id.
- */
-
-var getVirtualElement = function (id) {
-  return virtualElements[id]
-}
-
-/**
- * Get a container DOM node using the reference id.
- */
-
-var getContainer = function (id) {
-  return containers[id]
-}
-
-/**
- * Get an entity using the entity id.
- */
-
-var getEntity = function (id) {
-  return entities[id]
-}
-
-/**
- * Get child entities by reference id.
- */
-
-var getChildren = function (id) {
-  return children[id]
-}
-
-/**
- * Update all the children of an entity.
- *
- * @param {String} id Component instance id.
- */
-
-var updateChildren = function (entityId) {
-  forEach(getChildren(entityId), updateEntity)
-}
-
-// var updateChildren = compose(map(updateEntity), getChildren)
-
-/**
- * Remove all of the child entities of an entity
- *
- * @param {Entity} entity
- */
-
-var unmountChildren = function (entityId) {
-  forEach(getChildren(entityId), removeEntity)
-}
+},{}],39:[function(_require,module,exports){
+var raf = _require('component-raf')
+var frames = {}
 
 /**
  * Tell the container it's dirty and needs to re-render.
  */
 
-var scheduleFrame = function (containerId) {
-  frames[containerId] = raf(function () {
-    render(getContainer(containerId), getVirtualElement(containerId))
-  })
+exports.set = function (id, fn) {
+  exports.clear(id)
+  frames[id] = raf(fn)
+  return id
 }
 
 /**
  * Clear the current scheduled frame
  */
 
-var clearFrame = function (containerId) {
-  var frameId = frames[containerId]
+exports.clear = function (id) {
+  var frameId = frames[id]
   if (frameId) {
     raf.cancel(frameId)
-    delete frames[containerId]
+    delete frames[id]
   }
-  return containerId
 }
 
-/**
- * Find the container id an entity belongs to
- */
-
-var getEntityContainer = function (entity) {
-  if (containers[entity.id]) return entity.id
-  return getEntityContainer(entity.ownerId)
-}
-
-/**
- * Patch an element with the diff from two trees.
- */
-
-var patch = function (entityId, prev, next, el) {
-  return diffNode(entityId, '0', prev, next, el)
-}
-
-/**
- * Group an array of virtual nodes using their keys
- * @param  {Object} acc
- * @param  {Object} child
- * @return {Object}
- */
-
-var keyMapReducer = function (acc, child) {
-  if (child && child.key != null) acc[child.key] = child
-  return acc
-}
-
-/**
- * Update the entity state using a promise
- *
- * @param {String} entityId
- * @param {Promise} promise
- */
-
-var updateState = curry(function (entityId, nextState) {
-  if (!nextState) return
-  if (isPromise(nextState)) return nextState.then(updateState(entityId))
-  pendingState[entityId] = assign(pendingState[entityId] || {}, nextState)
-  invalidateEntity(entityId)
-})
-
-/**
- * Replace the props for an instance
- */
-
-var replaceProps = function (entityId, nextProps) {
-  pendingProps[entityId] = nextProps
-  return entityId
-}
-
-/**
- * Update an entity to match the latest rendered vode. We always
- * replace the props on the component when composing them. This
- * will trigger a re-render on all children below this point.
- *
- * (EntityId, nextProps) -> void
- */
-
-var updateProps = compose(invalidateEntity, replaceProps)
-
-/**
- * Invalidate the container for an entity
- * (EntityId) -> void
- */
-
-var invalidateEntity = compose(scheduleFrame, clearFrame, getEntityContainer, getEntity)
-
-/**
- * Add all of the DOM event listeners
- */
-
-var addNativeEventListeners = function () {
-  forEach(events, function (eventType) {
-    document.body.addEventListener(eventType, handleNativeEvent, true)
-  })
-}
-
-/**
- * Add all of the DOM event listeners
- */
-
-var removeNativeEventListeners = function () {
-  forEach(events, function (eventType) {
-    document.body.removeEventListener(eventType, handleNativeEvent, true)
-  })
-}
+},{"component-raf":1}],40:[function(_require,module,exports){
+var keypath = _require('object-path')
+var handlers = {}
 
 /**
  * Get a handler for an entity
  */
 
-var getHandler = function (entityId, path, eventType) {
-  keypath.get(handlers, [entityId, path, eventType])
+exports.get = function (path) {
+  keypath.get(handlers, path)
 }
 
 /**
  * Add an event handler for an entity at a path
  */
 
-var addHandler = function (entityId, path, eventType, fn) {
-  keypath.set(handlers, [entityId, path, eventType], fn)
+exports.set = function (path, fn) {
+  keypath.set(handlers, path, fn)
 }
 
 /**
  * Remove a single event handler for an entity
  */
 
-var removeHandler = function (entityId, path, eventType) {
-  var args = [entityId]
-  if (path) args.push(path)
-  if (eventType) args.push(eventType)
-  keypath.del(handlers, args)
-}
+exports.remove = curry(function (path) {
+  keypath.del(handlers, path)
+})
 
 /**
  * Remove all event handlers for an entity
  */
 
-var removeAllHandlers = function (entityId) {
-  keypath.del(handlers, [entityId])
+exports.removeAll = curry(function (path) {
+  keypath.del(handlers, path)
+})
+
+},{"object-path":21}],41:[function(_require,module,exports){
+var tree = _require('../shared/tree')
+var uid = _require('get-uid')
+var defaults = _require('object-defaults')
+var isPromise = _require('is-promise')
+var isEmpty = _require('is-empty')
+var events = _require('../shared/events')
+var isSVGAttribute = _require('is-svg-attribute')
+var frame = _require('./frame')
+var handler = _require('./handler')
+var dom = _require('./dom')
+var containers = _require('./container')
+var svgNamespace = 'http://www.w3.org/2000/svg'
+var elementHelpers = _require('../shared/element')
+var nodeType = elementHelpers.nodeType
+
+// Ramda
+var curry = _require('ramda/src/curry')
+var prop = _require('ramda/src/prop')
+var mapObj = _require('ramda/src/mapObj')
+// var pipe = require('ramda/src/pipe')
+
+// Fast.js
+var forEach = _require('fast.js/forEach')
+var assign = _require('fast.js/object/assign')
+var indexOf = _require('fast.js/array/indexOf')
+var reduce = _require('fast.js/reduce')
+
+/**
+ * Entity Tree Functions
+ * ============================================================================
+ */
+
+ /**
+  * Creates a component instance (entity) from a virtual element.
+  */
+
+var createEntity = function (container, parent, path, vnode) {
+  var component = getComponent(vnode)
+  var props = defaults(vnode.attributes, component.defaultProps)
+  var state = component.initialState ? component.initialState(props) : {}
+  var entity = {
+    id: uid(),
+    type: component,
+    path: path,
+    owner: parent,
+    containerId: container.id,
+    props: props,
+    state: state,
+    virtualElement: null,
+    nativeElement: null,
+    pendingState: null,
+    pendingProps: null,
+    children: {}
+  }
+  entity.updateState = updateState(container, entity)
+  entity.updateProps = updateProps(container, entity)
+  var virtualElement = renderEntity(entity)
+  var nativeElement = renderElement(container, entity, '0', virtualElement)
+  entity.virtualElement = virtualElement
+  entity.nativeElement = nativeElement
+  return entity
+}
+
+/**
+ * Render an entity to get the new virtual node
+ */
+
+var renderEntity = function (entity) {
+  var component = entity.type
+  var result = component.render(entity, entity.updateState)
+  if (!result) throw new TypeError('Render function must return an element.')
+  return result
+}
+
+/**
+ * Update a component instance.
+ */
+
+var updateEntity = function (entity) {
+  var virtualElement = entity.virtualElement
+  var nativeElement = entity.nativeElement
+  var previousState = entity.state
+  var previousProps = entity.props
+  commitEntity(entity)
+  if (!shouldRender(entity)) return updateChildren(entity)
+  var nextElement = renderEntity(entity)
+  if (nextElement === virtualElement) return updateChildren(entity)
+  entity.nativeElement = patchNativeElement(container, entity, virtualElement, nextElement, nativeElement)
+  entity.virtualElement = nextElement
+  updateChildren(entity)
+  trigger('afterRender', entity, [entity, updatedElement])
+  trigger('afterUpdate', entity, [entity, previousProps, previousState])
+}
+
+/**
+ * Commit props and state changes to an entity.
+ */
+
+var commitEntity = function (entity) {
+  entity.state = merge(entity.state, entity.pendingState)
+  entity.props = merge(entity.props, entity.pendingProps)
+  delete entity.pendingState
+  delete entity.pendingProps
+}
+
+/**
+ * Remove an entity and all it's children from the entity tree
+ */
+
+var removeEntity = function (container, path, entity) {
+  var branch = pruneTree(path, container)
+  tree.iterateUp(beforeUnmount, branch)
+}
+
+/**
+ * Check to see if an entity needs a render
+ */
+
+var shouldRender = function (entity) {
+  if (!isDirty(entity)) return false
+  var fn = entity.type.shouldRender || entity.type.shouldUpdate
+  if (!fn) return true
+  return fn(entity, entity.pendingProps, entity.pendingState)
 }
 
 /**
@@ -1572,545 +1848,230 @@ var removeAllHandlers = function (entityId) {
  * @return {Boolean}
  */
 
-var isDirty = function (entityId) {
-  return entityId in pendingProps || entityId in pendingState
+var isDirty = function (entity) {
+  return entity.pendingProps || entity.pendingState
 }
 
 /**
- * A rendered component instance.
+ * Trigger a hook on a component.
  */
 
-var createEntity = function (id, type, ownerId) {
-  return {
-    id: id,
-    ownerId: ownerId,
-    type: type
-  }
+var trigger = function (name, entity, args) {
+  var fn = entity.type[name]
+  if (!fn) return
+  return fn(args)
 }
-
-/**
- * Get the component state
- *
- * @param {Object} entity
- *
- * @return {Object}
- */
-
-var toComponent = function (entityId) {
-  return {
-    id: entityId,
-    props: entityProps[entityId],
-    state: entityState[entityId]
-  }
-}
-
-/**
- * Remove a container
- *
- * @param {Object} container
- */
-
-var removeContainer = function (containerId) {
-  clearFrame(containerId)
-  removeElement(containerId, '0', nativeElements[containerId])
-  delete nativeElements[containerId]
-  delete virtualElements[containerId]
-  delete containers[containerId]
-  if (isEmpty(containers)) removeNativeEventListeners()
-}
-
-/**
- * Create a new container given an element
- *
- * @param {HTMLElement} container
- *
- * @return {String} id
- */
-
-var createContainer = function (node) {
-  if (!isDom(node)) {
-    throw new TypeError('deku: Container element must be a DOM element')
-  }
-  if (getContainerByNode(node)) {
-    throw new Error('deku: You can\'t use the same element for multiple containers')
-  }
-  if (node.children.length > 0) {
-    console.info('deku: The container element is not empty. These elements will be removed. Read more: http://cl.ly/b0Sr')
-    node.innerHTML = ''
-  }
-  if (node === document.body) {
-    console.warn('deku: Using document.body is allowed but it can cause some issues. Read more: http://cl.ly/b0SC')
-  }
-  addNativeEventListeners()
-  var containerId = uid()
-  containers[containerId] = node
-  children[containerId] = {}
-  return containerId
-}
-
-/**
- * Render a vnode into a container
- *
- * @param  {HTMLElement} container
- * @param  {Object} vnode
- */
-
-var render = curry(function (node, vnode) {
-  var containerId = getContainerByNode(node) || createContainer(node)
-  // var isRendering = inProgress[containerId]
-  var nativeElement = nativeElements[containerId]
-  var virtualElement = getVirtualElement(containerId)
-  clearFrame(containerId)
-  if (!nativeElement) {
-    nativeElement = toNative(containerId, '0', vnode)
-    node.appendChild(nativeElement)
-  } else {
-    if (virtualElement !== vnode) {
-      nativeElement = patch(containerId, virtualElement, vnode, nativeElement)
-    }
-    updateChildren(containerId)
-  }
-  nativeElements[containerId] = nativeElement
-  virtualElements[containerId] = vnode
-  delete inProgress[containerId]
-  flushMountQueue()
-})
-
-/**
- * Remove a component from the native dom.
- *
- * @param {Entity} entity
- */
-
-var removeEntity = function (entityId) {
-  var entity = entities[entityId]
-  if (!entity) return
-  var nativeElement = nativeElements[entityId]
-  trigger('beforeUnmount', entity, [toComponent(entityId), nativeElement])
-  unmountChildren(entityId)
-  removeAllHandlers(entityId)
-  delete entities[entityId]
-  delete children[entityId]
-  delete pendingProps[entityId]
-  delete pendingState[entityId]
-  delete virtualElements[entityId]
-  delete nativeElements[entityId]
-  delete entityProps[entityId]
-  delete entityState[entityId]
-}
-
-/**
- * Update a component.
- *
- * - Commit any changes and re-render
- * - If the same virtual element is returned we skip diffing
- *
- * @param {String} entityId
- */
-
-var updateEntity = function (entityId) {
-  var entity = entities[entityId]
-  var currentTree = virtualElements[entityId]
-  var currentElement = nativeElements[entityId]
-  var previousState = entity.state
-  var previousProps = entity.props
-  var shouldUpdate = shouldRender(entity)
-  commitPendingChanges(entity.id)
-  if (!shouldUpdate) return updateChildren(entityId)
-  var nextTree = renderEntity(entity)
-  if (nextTree === currentTree) return updateChildren(entityId)
-  var updatedElement = patch(entityId, currentTree, nextTree, currentElement)
-  virtualElements[entityId] = nextTree
-  nativeElements[entityId] = updatedElement
-  updateChildren(entityId)
-  trigger('afterRender', entity, [toComponent(entityId), updatedElement])
-  triggerUpdate('afterUpdate', entity, [toComponent(entityId), previousProps, previousState])
-}
-
-/**
- * Create a native element from a component.
- */
-
-var toNativeComponent = function (parentId, path, vnode) {
-  var entity = createEntity(path, vnode.component, parentId)
-  var initialProps = defaults(vnode.props, entity.type.defaultProps)
-  var initialState = entity.type.initialState ? entity.type.initialState(initialProps) : {}
-  children[parentId] = {}
-  children[parentId][path] = entity.id
-  entityProps[entity.id] = initialProps
-  entityState[entity.id] = initialState
-  entities[entity.id] = entity
-  commitPendingChanges(entity.id)
-  var virtualElement = renderEntity(entity)
-  var nativeElement = toNative(entity.id, '0', virtualElement)
-  virtualElements[entity.id] = virtualElement
-  nativeElements[entity.id] = nativeElement
-  mountQueue.push(entity.id)
-  return nativeElement
-}
-
-/**
- * Create a native element from a virtual element.
- *
- * @param {String} entityId
- * @param {String} path
- * @param {Object} vnode
- *
- * @return {HTMLDocumentFragment}
- */
-
-var toNative = function (entityId, path, vnode) {
-  switch (nodeType(vnode)) {
-    case 'text':
-      return document.createTextNode(vnode)
-    case 'element':
-      return toNativeElement(entityId, path, vnode)
-    case 'component':
-      return toNativeComponent(entityId, path, vnode)
-  }
-}
-
-/**
- * Create a native element from a virtual element.
- */
-
-var toNativeElement = function (entityId, path, vnode) {
-  var el = createElement(vnode.type)
-  el.__entity__ = entityId
-  el.__path__ = path
-  forEach(vnode.attributes, function (value, name) {
-    setAttribute(entityId, path, el, name, value)
-  })
-  forEach(vnode.children, function (child, i) {
-    if (child == null) return
-    var childEl = toNative(entityId, path + '.' + i, child)
-    if (!childEl.parentNode) el.appendChild(childEl)
-  })
-  return el
-}
-
-/**
- * Create a diff between two trees of nodes.
- */
-
-var diffNode = function (entityId, path, prev, next, el) {
-  var nextType = nodeType(next)
-  var prevType = nodeType(prev)
-  if (nextType !== prevType) {
-    return replaceElement(entityId, path, el, next)
-  }
-  switch (nextType) {
-    case 'text':
-      return diffText(prev, next, el)
-    case 'element':
-      return diffElement(path, entityId, prev, next, el)
-    case 'component':
-      return diffComponent(path, entityId, prev, next, el)
-  }
-}
-
-/**
- * Diff two text nodes and update the element.
- */
-
-var diffText = function (previous, current, el) {
-  if (current !== previous) el.data = current
-  return el
-}
-
-/**
- * Diff the children of an ElementNode.
- */
-
-var diffChildren = function (path, entityId, prev, next, el) {
-  var positions = []
-  var childNodes = Array.prototype.slice.apply(el.childNodes)
-  var leftKeys = reduce(prev.children, keyMapReducer, {})
-  var rightKeys = reduce(next.children, keyMapReducer, {})
-  var currentChildren = assign({}, children[entityId])
-
-  // Diff all of the nodes that have keys. This lets us re-used elements
-  // instead of overriding them and lets us move them around.
-  if (!isEmpty(leftKeys) && !isEmpty(rightKeys)) {
-
-    // Removals
-    forEach(leftKeys, function (leftNode, key) {
-      if (rightKeys[key] == null) {
-        var leftPath = path + '.' + leftNode.index
-        removeElement(
-          entityId,
-          leftPath,
-          childNodes[leftNode.index]
-        )
-      }
-    })
-
-    // Update nodes
-    forEach(rightKeys, function (rightNode, key) {
-      var leftNode = leftKeys[key]
-
-      // We only want updates for now
-      if (leftNode == null) return
-
-      var leftPath = path + '.' + leftNode.index
-
-      // Updated
-      positions[rightNode.index] = diffNode(
-        leftPath,
-        entityId,
-        leftNode,
-        rightNode,
-        childNodes[leftNode.index]
-      )
-    })
-
-    // Update the positions of all child components and event handlers
-    forEach(rightKeys, function (rightNode, key) {
-      var leftNode = leftKeys[key]
-
-      // We just want elements that have moved around
-      if (leftNode == null || leftNode.index === rightNode.index) return
-
-      var rightPath = path + '.' + rightNode.index
-      var leftPath = path + '.' + leftNode.index
-
-      // Update all the child component path positions to match
-      // the latest positions if they've changed. This is a bit hacky.
-      forEach(currentChildren, function (childId, childPath) {
-        if (leftPath === childPath) {
-          delete children[entityId][childPath]
-          children[entityId][rightPath] = childId
-        }
-      })
-    })
-
-    // Now add all of the new nodes last in case their path
-    // would have conflicted with one of the previous paths.
-    forEach(rightKeys, function (rightNode, key) {
-      var rightPath = path + '.' + rightNode.index
-      if (leftKeys[key] == null) {
-        positions[rightNode.index] = toNative(
-          entityId,
-          rightPath,
-          rightNode
-        )
-      }
-    })
-
-  } else {
-    var maxLength = Math.max(prev.children.length, next.children.length)
-
-    // Now diff all of the nodes that don't have keys
-    for (var i = 0; i < maxLength; i++) {
-      var leftNode = prev.children[i]
-      var rightNode = next.children[i]
-
-      // Both null
-      if (leftNode == null && rightNode == null) {
-        continue
-      }
-
-      // Removals
-      if (rightNode == null) {
-        removeElement(
-          entityId,
-          path + '.' + leftNode.index,
-          childNodes[leftNode.index]
-        )
-      }
-
-      // New Node
-      if (leftNode == null) {
-        positions[rightNode.index] = toNative(
-          entityId,
-          path + '.' + rightNode.index,
-          rightNode
-        )
-      }
-
-      // Updated
-      if (leftNode && rightNode) {
-        positions[leftNode.index] = diffNode(
-          path + '.' + leftNode.index,
-          entityId,
-          leftNode,
-          rightNode,
-          childNodes[leftNode.index]
-        )
-      }
-    }
-  }
-
-  forEach(positions, moveElement(el))
-}
-
-/**
- * Diff the attributes and add/remove them.
- */
-
-var diffAttributes = function (prev, next, el, entityId, path) {
-  var nextAttrs = next.attributes
-  var prevAttrs = prev.attributes
-
-  // add new attrs
-  forEach(nextAttrs, function (value, name) {
-    if (nextAttrs == null) {
-      removeAttribute(entityId, path, el, name)
-    } else if (events[name] || !(name in prevAttrs) || prevAttrs[name] !== value) {
-      setAttribute(entityId, path, el, name, value)
-    }
-  })
-
-  // remove old attrs
-  forEach(prevAttrs, function (value, name) {
-    if (!(name in nextAttrs)) {
-      removeAttribute(entityId, path, el, name)
-    }
-  })
-}
-
-/**
- * Update a component with the props from the next node. If
- * the component type has changed, we'll just remove the old one
- * and replace it with the new component.
- */
-
-var diffComponent = function (path, entityId, prev, next, el) {
-  if (next.type !== prev.type) return replaceElement(entityId, path, el, next)
-  updateProps(children[entityId][path], next.attributes)
-  // TODO: We could update here straight away and skip looping through children later
-  return el
-}
-
-/**
- * Diff two element nodes.
- */
-
-var diffElement = function (path, entityId, prev, next, el) {
-  if (next.type !== prev.type) return replaceElement(entityId, path, el, next)
-  diffAttributes(prev, next, el, entityId, path)
-  diffChildren(path, entityId, prev, next, el)
-  return el
-}
-
-/**
- * Removes an element from the DOM and unmounts and components
- * that are within that branch
- *
- * side effects:
- *   - removes element from the DOM
- *   - removes internal references
- *
- * @param {String} entityId
- * @param {String} path
- * @param {HTMLElement} el
- */
-
-var removeElement = function (entityId, path, el) {
-  var childrenByPath = children[entityId]
-  var childId = childrenByPath[path]
-  var entityHandlers = handlers[entityId] || {}
-  var removals = []
-
-  // If the path points to a component we should use that
-  // components element instead, because it might have moved it.
-  if (childId) {
-    el = nativeElements[childId]
-    removeEntity(childId)
-    removals.push(path)
-  } else {
-
-    // Just remove the text node
-    if (el.tagName) return el.parentNode.removeChild(el)
-
-    // Then we need to find any components within this
-    // branch and unmount them.
-    forEach(childrenByPath, function (childId, childPath) {
-      if (childPath === path || isWithinPath(path, childPath)) {
-        removeEntity(childId)
-        removals.push(childPath)
-      }
-    })
-
-    // Remove all events at this path or below it
-    forEach(entityHandlers, function (fn, handlerPath) {
-      if (handlerPath === path || isWithinPath(path, handlerPath)) {
-        removeHandler(entityId, handlerPath)
-      }
-    })
-  }
-
-  forEach(removals, function (path) {
-    delete children[entityId][path]
-  })
-  el.parentNode.removeChild(el)
-  returnElement(el)
-}
-
-/**
- * Replace an element in the DOM. Removing all components
- * within that element and re-rendering the new virtual node.
- *
- * @param {Entity} entity
- * @param {String} path
- * @param {HTMLElement} el
- * @param {Object} vnode
- *
- * @return {void}
- */
-
-var replaceElement = function (entityId, path, el, vnode) {
-  var parent = el.parentNode
-  var index = Array.prototype.indexOf.call(parent.childNodes, el)
-
-  // remove the previous element and all nested components. This
-  // needs to happen before we create the new element so we don't
-  // get clashes on the component paths.
-  removeElement(entityId, path, el)
-
-  // then add the new element in there
-  var newEl = toNative(entityId, path, vnode)
-  moveElement(parent, newEl, index)
-
-  if (isRoot(path)) {
-    updateEntityNativeElement(entityId, newEl)
-  }
-
-  return newEl
-}
-
-/**
- * Move a DOM element to a new index within it's parent
- */
-
-var moveElement = curry(function (element, childEl, newPosition) {
-  var target = element.childNodes[newPosition]
-  if (childEl !== target) {
-    if (target) {
-      element.insertBefore(childEl, target)
-    } else {
-      element.appendChild(childEl)
-    }
-  }
-})
 
 /**
  * Update all entities in a branch that have the same nativeElement. This
  * happens when a component has another component as it's root node.
- *
- * @param {String} entityId
- * @param {HTMLElement} newEl
- *
- * @return {void}
  */
 
-var updateEntityNativeElement = function (entityId, newEl) {
-  var target = getEntity(entityId)
-  if (!target) return
-  if (children[target.ownerId]['0'] === entityId) {
-    nativeElements[target.ownerId] = newEl
-    updateEntityNativeElement(target.ownerId, newEl)
+var updateEntityNativeElement = function (entity, newEl) {
+  if (!entity) return
+  if (entity.owner.children['0'] === entity) {
+    entity.owner.nativeElement = newEl
+    updateEntityNativeElement(entity.parent, newEl)
   }
+}
+
+/**
+ * Update all the children of an entity.
+ *
+ * (Entity) -> void
+ */
+
+var updateChildren = pipe(
+  prop('children'),
+  mapObj(updateEntity)
+)
+
+/**
+ * Remove all of the child entities of an entity
+ * (Entity) -> void
+ */
+
+var removeChildren = pipe(
+  prop('children'),
+  mapObj(removeEntity)
+)
+
+/**
+ * Virtual Tree Functions
+ * ============================================================================
+ */
+
+/*
+ * Removes an element from the DOM and unmounts and components
+ * that are within that branch
+ */
+
+var getVirtualElement = function (path, virtualElement) {
+  return tree.get(path, virtualElement)
+}
+
+var removeNativeElement = function () {}
+var removeHandlers = function () {}
+
+/**
+ * Replace an element in the DOM. Removing all components
+ * within that element and re-rendering the new virtual node.
+ */
+
+var replaceElement = function (container, entity, path, el, vnode) {
+  removeNestedComponents(container, entity, path)
+  removeNestedHandlers(container, path)
+  var newEl = renderElement(container, entity, path, vnode)
+  insertElement(newEl, indexOf(el, el.parentNode.children), parent)
+  updateEntityNativeElement(container, entity, newEl)
+  return newEl
+}
+
+/**
+ * Insert an entity into the entity tree
+ */
+
+var insertElement = function (container, entity, path, nativeElement, virtualElement) {
+  var el = renderElement(container, entity, path, virtualElement)
+  var index = path.split('.').pop()
+  insertAt(el, index, nativeElement)
+}
+
+/**
+ * Move an element to a new position.
+ */
+
+var moveElement = curry(function (entity, parentElement, position) {
+
+})
+
+/**
+ * Create a native element from a virtual element.
+ */
+
+var renderElement = function (container, entity, path, vnode) {
+  switch (nodeType(vnode)) {
+    case 'text':
+      return document.createTextNode(vnode)
+    case 'element':
+      return toNativeElement(container, entity, path, vnode)
+    case 'component':
+      var child = createEntity(container, entity, path, vnode)
+      entity.children[path] = child
+      mountQueue.push(entity)
+      return child.nativeElement
+  }
+}
+
+/**
+ * State control
+ * ============================================================================
+ */
+
+/**
+ * Update the entity state using a promise
+ */
+
+var updateState = curry(function (container, entity, nextState) {
+  if (!nextState) return
+  if (isPromise(nextState)) return nextState.then(updateState(container, entity))
+  entity.pendingState = merge(entity.pendingState, nextState)
+  invalidate(container)
+})
+
+/**
+ * Update an entity to match the latest rendered vode. We always
+ * replace the props on the component when composing them. This
+ * will trigger a re-render on all children below this point.
+ *
+ * (EntityId, nextProps) -> void
+ */
+
+var updateProps = curry(function (container, entity, nextProps) {
+  entity.pendingProps = nextProps
+  invalidate(container)
+})
+
+/**
+ * Invalidate the container for an entity
+ * (Container) -> void
+ */
+
+var invalidate = function (container) {
+  frame.set(container.id, function () {
+    render(container.node, container.virtualElement)
+  })
+}
+
+/**
+ * DOM Functions
+ * ============================================================================
+ */
+
+/**
+ * Patch an container with a new virtual element
+ */
+
+var patchNativeElement = function (container, entity, previousElement, nextElement, nativeElement) {
+  return reduce(
+    diff(previousElement, nextElement),
+    patch(container, entity),
+    nativeElement
+  )
+}
+
+/**
+ * Apply a patch to an element
+ */
+
+var patch = curry(function (container, entity, parentElement, change) {
+  var path = change.path
+  var nextElement = change.nextElement
+  var previousElement = change.previousElement
+  var nativeElement = getElementByPath(change.path, parentElement)
+  switch (change.type) {
+    case 'text':
+      nativeElement.data = change.value
+    case 'replace':
+      replaceElement(container, entity, path, nativeElement, nextElement)
+    case 'remove':
+      removeElement(container, entity, path, nativeElement)
+    case 'insert':
+      insertElement(container, entity, path, nativeElement, nextElement)
+    case 'move':
+      forEach(change.positions, moveElement(entity, nativeElement))
+    case 'update':
+      updateProps(container, getEntity(change.path, container), change.value)
+  }
+})
+
+// var removeElement = function(container, entity, path, nativeElement) {
+//   removeNestedComponents()
+//   removeNativeElement(path, nativeElement)
+// }
+
+// var removeNestedComponents = function () {
+//   for (var childPath in entity.children) {
+
+//   }
+//   forEach(getNestedComponents(path, entity), removeEntity)
+// }
+
+/**
+ * Create a native element from a virtual element.
+ */
+
+var toNativeElement = function (container, entity, path, vnode) {
+  var el = createElement(vnode.type)
+  el.__entity__ = entity.id
+  el.__container__ = container.id
+  forEach(vnode.attributes, setAttribute(container, entity, path, el))
+  forEach(vnode.children, function (child, i) {
+    if (child == null) return
+    var childEl = renderElement(container, entity, path + '.' + i, child)
+    el.appendChild(childEl)
+  })
+  return el
 }
 
 /**
@@ -2118,28 +2079,42 @@ var updateEntityNativeElement = function (entityId, newEl) {
  * instead of relying on side-effects.
  */
 
-var handleEvent = curry(function (entityId, fn, e) {
-  var entity = getEntity(entityId)
+var handleEvent = curry(function (container, entity, fn, e) {
   if (entity) {
-    var update = updateState(entityId)
-    update(fn(e, toComponent(entityId), update))
+    var update = updateState(container, entity)
+    update(fn(e, entity, update))
   } else {
     fn(e)
   }
 })
 
 /**
- * Set the attribute of an element, performing additional transformations
- * dependning on the attribute name
+ * Handle an event that has occured within the container
  *
- * @param {HTMLElement} el
- * @param {String} name
- * @param {String} value
+ * @param {Event} event
  */
 
-var setAttribute = function (entityId, path, el, name, value) {
+var handleNativeEvent = function (event) {
+  var target = event.target
+  while (target) {
+    var fn = handler.get([target.__container__, event.type, target.__entity__, target.__path__])
+    if (fn) {
+      event.delegateTarget = target
+      fn(event)
+      break
+    }
+    target = target.parentNode
+  }
+}
+
+/**
+ * Set the attribute of an element, performing additional transformations
+ * dependning on the attribute name
+ */
+
+var setAttribute = function (container, entity, path, el, value, name) {
   if (events[name]) {
-    addHandler(entityId, path, events[name], handleEvent(entityId, value))
+    handler.set([container.id, events[name], entity.id, path], handleEvent(container, entity, value))
     return
   }
   switch (name) {
@@ -2147,13 +2122,14 @@ var setAttribute = function (entityId, path, el, name, value) {
     case 'disabled':
     case 'selected':
       el[name] = true
+      el.setAttribute(name, value)
       break
     case 'innerHTML':
     case 'value':
       el[name] = value
       break
-    case svg.isAttribute(name):
-      el.setAttributeNS(svg.namespace, name, value)
+    case isSVGAttribute(name):
+      el.setAttributeNS(svgNamespace, name, value)
       break
     default:
       el.setAttribute(name, value)
@@ -2163,15 +2139,12 @@ var setAttribute = function (entityId, path, el, name, value) {
 
 /**
  * Remove an attribute, performing additional transformations
- * dependning on the attribute name
- *
- * @param {HTMLElement} el
- * @param {String} name
+ * depending on the attribute name
  */
 
-var removeAttribute = function (entityId, path, el, name) {
+var removeAttribute = function (container, entity, path, el, name) {
   if (events[name]) {
-    removeHandler(entityId, path, events[name])
+    handler.remove([container.id, events[name], entity.id, path])
     return
   }
   switch (name) {
@@ -2179,6 +2152,7 @@ var removeAttribute = function (entityId, path, el, name) {
     case 'disabled':
     case 'selected':
       el[name] = false
+      el.removeAttribute(name)
       break
     case 'innerHTML':
     case 'value':
@@ -2191,96 +2165,46 @@ var removeAttribute = function (entityId, path, el, name) {
 }
 
 /**
- * Trigger a hook on a component.
- *
- * @param {String} name Name of hook.
- * @param {Entity} entity The component instance.
- * @param {Array} args To pass along to hook.
+ * Add all of the DOM event listeners
  */
 
-var trigger = function (name, entity, args) {
-  if (typeof entity.type[name] !== 'function') return
-  return entity.type[name].apply(null, args)
+var addNativeEventListeners = function (container) {
+  forEach(events, function (eventType) {
+    document.body.addEventListener(eventType, handleNativeEvent, true)
+  })
 }
 
 /**
- * Trigger a hook on the component and allow state to be
- * updated too.
- *
- * @param {String} name
- * @param {Object} entity
- * @param {Array} args
- *
- * @return {void}
+ * Add all of the DOM event listeners
  */
 
-var triggerUpdate = function (name, entity, args) {
-  args.push(updateState(entity.id))
-  updateState(entity.id, trigger(name, entity, args))
+var removeNativeEventListeners = function (container) {
+  forEach(events, function (eventType) {
+    document.body.removeEventListener(eventType, handleNativeEvent, true)
+  })
 }
 
 /**
- * Commit props and state changes to an entity.
+ * Helper Functions
+ * ============================================================================
  */
 
-var commitPendingChanges = function (entityId) {
-  entityState[entityId] = assign(entityState[entityId] || {}, pendingState[entityId])
-  entityProps[entityId] = assign(entityProps[entityId] || {}, pendingProps[entityId])
-  delete pendingState[entityId]
-  delete pendingProps[entityId]
+/**
+ * Maybe merge two objects
+ */
+
+function merge (one, two) {
+  return assign(one || {}, two || {})
 }
 
 /**
- * Handle an event that has occured within the container
- *
- * @param {Event} event
+ * Get the component from a virtual element
  */
 
-var handleNativeEvent = function (event) {
-  var target = event.target
-  var eventType = event.type
-  while (target) {
-    var fn = getHandler(target.__entity__, target.__path__, eventType)
-    if (fn) {
-      event.delegateTarget = target
-      fn(event)
-      break
-    }
-    target = target.parentNode
-  }
-}
-
-/**
- * Render the entity and make sure it returns a node
- *
- * @param {Entity} entity
- *
- * @return {VirtualTree}
- */
-
-var renderEntity = function (entity) {
-  var render = entity.type.render
-  if (!render) throw new Error('Component needs a render function')
-  var result = render(toComponent(entity.id), updateState(entity.id))
-  if (!result) throw new Error('Render function must return an element.')
-  return result
-}
-
-/**
- * Try to avoid creating new virtual dom if possible.
- *
- * Later we may expose this so you can override, but not there yet.
- *
- * @return {Boolean}
- */
-
-var shouldRender = function (entity) {
-  if (!isDirty(entity)) return false
-  var fn = entity.type.shouldRender || entity.type.shouldUpdate
-  if (!fn) return true
-  var nextProps = pendingProps[entity.id]
-  var nextState = pendingState[entity.id]
-  return fn(toComponent(entity.id), nextProps, nextState)
+var getComponent = function (vnode) {
+  var component = vnode.type
+  validateComponent(component)
+  return component
 }
 
 /**
@@ -2290,44 +2214,37 @@ var shouldRender = function (entity) {
 
 var flushMountQueue = function () {
   while (mountQueue.length) {
-    var entityId = mountQueue.pop()
-    var entity = entities[entityId]
-    var nativeElement = nativeElements[entityId]
-    trigger('afterRender', entity, [toComponent(entity.id), nativeElement])
-    triggerUpdate('afterMount', entity, [toComponent(entity.id), nativeElement, updateState(entityId)])
+    var entity = mountQueue.pop()
+    trigger('afterRender', entity, [entity, entity.nativeElement])
+    entity.updateState(trigger('afterMount', entity, [entity, entity.nativeElement, entity.updateState]))
   }
 }
 
 /**
- * Get the entity tree for a container. This allows you to view the tree
- * of components, including their state. This could be used to create developer
- * tools or to inject props into components within the tree.
- *
- * @param {HTMLElement} container
+ * Exports
+ * ============================================================================
  */
-
-var inspectNode = curry(function (path, id) {
-  var node = {
-    id: id,
-    path: path,
-    nativeElement: nativeElements[id],
-    props: entityProps[id],
-    state: entityState[id],
-    children: {}
-  }
-  for (var childPath in children[id]) {
-    node.children[childPath] = inspectNode(id, children[id][childPath])
-  }
-  return node
-})
 
 /**
- * Render a virtual element to a DOM element container
-
- * (HTMLElement, VirtualElement) -> void
+ * Render a vnode into a container. If that container already exists
+ * we'll just perform an update.
  */
 
-exports.render = render
+exports.render = curry(function (node, nextElement) {
+  var container = createContainer(node)
+  var nativeElement = container.nativeElement
+  var virtualElement = container.virtualElement
+  frame.clear(container.id)
+  if (!nativeElement) {
+    container.nativeElement = renderElement(container, null, '0', nextElement)
+    node.appendChild(container.nativeElement)
+  } else {
+    container.nativeElement = patchElement(container, null, virtualElement, nextElement, nativeElement)
+    container.virtualElement = nextElement
+    updateChildren(container)
+  }
+  flushMountQueue()
+})
 
 /**
  * Remove any virtual elements from a DOM element container
@@ -2335,14 +2252,23 @@ exports.render = render
  * (Node) -> undefined
  */
 
-exports.remove = curry(compose(removeContainer, getContainerByNode))
+exports.remove = function (node) {
+  var container = containers.get(node)
+  removeNativeEventListeners(container)
+  removeNativeElement(container, 'root', '0', container.nativeElement)
+  containers.remove(container)
+  frame.remove(container.id)
+}
 
 /**
  * Inspect the tree of components within a DOM element container
  *
  * (HTMLElement) -> Object
  */
-exports.inspect = curry(compose(inspectNode('root'), getContainerByNode))
+
+exports.inspect = function (node) {
+  return containers.get(node)
+}
 
 /**
  * Update the state of an entity.
@@ -2360,77 +2286,7 @@ exports.updateState = updateState
 
 exports.updateProps = updateProps
 
-},{"../shared/defaults":40,"../shared/element":41,"../shared/events":42,"../shared/path":43,"../shared/svg":44,"./pool":37,"component-raf":1,"fast.js/forEach":7,"fast.js/object/assign":10,"fast.js/reduce":13,"get-uid":14,"is-dom":15,"is-empty":16,"is-promise":17,"object-path":18,"ramda/src/compose":21,"ramda/src/curry":22,"ramda/src/mapObj":35}],37:[function(_require,module,exports){
-/**
- * This module provides a way to pool DOM elements. Creating brand new DOM
- * elements can be an expensive process so we can just re-use elements that
- * have already been made.
- */
-
-var svg = _require('../shared/svg')
-var walk = _require('dom-walk')
-var Pool = _require('dom-pool')
-var forEach = _require('fast.js/forEach')
-var statefulElements = ['input', 'textarea']
-var pools = {}
-
-exports.createElement = createElement
-exports.returnElement = addToPool
-
-function createElement (tagName) {
-  if (isPoolableElement(tagName)) {
-    return prepareElement(getElementPool(tagName).pop())
-  }
-  return createNativeElement(tagName)
-}
-
-function getElementPool (tagName) {
-  var pool = pools[tagName]
-  if (!pool) {
-    var poolOpts = svg.isElement(tagName) ?
-      { namespace: svg.namespace, tagName: tagName } :
-      { tagName: tagName }
-    pool = pools[tagName] = new Pool(poolOpts)
-  }
-  return pool
-}
-
-function createNativeElement (tagName, namespace) {
-  if (svg.isElement(tagName)) {
-    return document.createElementNS(svg.namespace, tagName)
-  } else {
-    return document.createElement(tagName)
-  }
-}
-
-function prepareElement (el) {
-  removeAllChildren(el)
-  removeAllAttributes(el)
-  return el
-}
-
-function removeAllAttributes (el) {
-  forEach(el.attributes, function (attr) {
-    el.removeAttribute(attr.name)
-  })
-}
-
-function removeAllChildren (el) {
-  while (el.firstChild) el.removeChild(el.firstChild)
-}
-
-function isPoolableElement (tagName) {
-  return statefulElements.indexOf(tagName) < 0
-}
-
-function addToPool (el) {
-  walk(el, function (node) {
-    if (!node.tagName || !isPoolableElement(node.tagName)) return
-    getElementPool(node.tagName.toLowerCase()).push(node)
-  })
-}
-
-},{"../shared/svg":44,"dom-pool":3,"dom-walk":4,"fast.js/forEach":7}],38:[function(_require,module,exports){
+},{"../shared/element":44,"../shared/events":45,"../shared/tree":46,"./container":37,"./dom":38,"./frame":39,"./handler":40,"fast.js/array/indexOf":6,"fast.js/forEach":8,"fast.js/object/assign":11,"fast.js/reduce":14,"get-uid":15,"is-empty":17,"is-promise":18,"is-svg-attribute":19,"object-defaults":20,"ramda/src/curry":24,"ramda/src/mapObj":35,"ramda/src/prop":36}],42:[function(_require,module,exports){
 // Client rendering
 if (typeof document !== 'undefined') {
   var client = _require('./client')
@@ -2442,10 +2298,10 @@ if (typeof document !== 'undefined') {
 // Server rendering
 exports.renderString = _require('./server')
 
-},{"./client":36,"./server":39}],39:[function(_require,module,exports){
+},{"./client":41,"./server":43}],43:[function(_require,module,exports){
 var events = _require('../shared/events')
 var nodeType = _require('../shared/element').nodeType
-var defaults = _require('../shared/defaults')
+var defaults = _require('object-defaults')
 
 module.exports = render
 
@@ -2499,27 +2355,7 @@ function attributeToString (key, val) {
   return ' ' + key + '="' + val + '"'
 }
 
-},{"../shared/defaults":40,"../shared/element":41,"../shared/events":42}],40:[function(_require,module,exports){
-/**
- * The npm 'defaults' module but without clone because
- * it was requiring the 'Buffer' module which is huge.
- *
- * @param {Object} options
- * @param {Object} defaults
- *
- * @return {Object}
- */
-
-exports.defaults = function(options, defaults) {
-  Object.keys(defaults).forEach(function(key) {
-    if (typeof options[key] === 'undefined') {
-      options[key] = defaults[key]
-    }
-  })
-  return options
-}
-
-},{}],41:[function(_require,module,exports){
+},{"../shared/element":44,"../shared/events":45,"object-defaults":20}],44:[function(_require,module,exports){
 var type = _require('component-type')
 
 /**
@@ -2535,7 +2371,7 @@ exports.nodeType = function (node) {
   return 'component'
 }
 
-},{"component-type":2}],42:[function(_require,module,exports){
+},{"component-type":2}],45:[function(_require,module,exports){
 /**
  * All of the events can bind to. The keys are the attribute names we expect
  * and the values are the actual DOM events they map to. We can use this in
@@ -2580,17 +2416,135 @@ module.exports = {
   onWheel: 'wheel'
 }
 
-},{}],43:[function(_require,module,exports){
-/**
- * These are path string helpers. We use paths like 0.2.4 when rendering
- * components within the tree. These are used to identify virtual nodes.
+},{}],46:[function(_require,module,exports){
+var curry = _require('curry')
+
+/*
+
+This module makes it easy to work with element trees. This is the same kind of tree
+that's used for the virtual DOM and the kind that we store the rendered components in.
+
+A node in the tree has a type, attributes and children. Here's an example:
+
+```
+{
+  type: Component,
+  attributes: {
+    id: 213131123,
+    ownerId: 2234234,
+    props: {},
+    state: {},
+    nativeElement: Node,
+    virtualElement: VNode
+  },
+  children: [{
+    type: Component,
+    attributes: {
+      id: 213131123,
+      ownerId: 2234234,
+      props: {},
+      state: {}
+    },
+    children: [{
+      type: Component,
+      attributes: {
+        id: 213131123,
+        ownerId: 2234234,
+        props: {},
+        state: {}
+      },
+      children: []
+    }]
+  }]
+}
+```
+
+We reference nodes in the tree using index strings, eg. 0.1.4.5, which refer
+to the index of the children at each node.
+
  */
 
- /**
-  * Check if a path is actually the root.
-  */
+/**
+ * Convert a string path into a path we can use
+ */
 
-exports.isRoot = function (path) {
+var pathToArray = function (path) {
+  if (Array.isArray(path)) return path
+  return path.split('.')
+}
+
+/**
+ * Get a node at a path
+ */
+
+var get = function (target, node) {
+  var path = pathToArray(target)
+  while (path.length) {
+    node = node.children[path.shift()]
+  }
+  return node
+}
+
+/**
+ * Remove a node from the tree given a string path
+ */
+
+var prune = function (target, node) {
+  var path = pathToArray(target)
+  var targetIndex = path.pop()
+  var parentNode = get(path, node)
+  parentNode.children.splice(targetIndex, 1)
+  return node
+}
+
+/**
+ * Insert a new node into the tree at a path
+ */
+
+var graft = function (target, newNode, node) {
+  var path = pathToArray(target)
+  var targetIndex = path.pop()
+  var parentNode = get(path, node)
+  parentNode.children.splice(targetIndex, 0, newNode)
+  return node
+}
+
+/**
+ * Walk down a node and apply a function to each node
+ */
+
+var walkPre = curry(function (fn, node) {
+  fn(node)
+  node.children.forEach(traverse(fn))
+})
+
+/**
+ * Climb up a tree from the leaf nodes
+ */
+
+var walkPost = curry(function (fn, node) {
+  node.children.forEach(climb(fn))
+  fn(node)
+})
+
+/**
+ * Move a node to another location in the tree
+ */
+
+var move = curry(function (from, to, node) {
+  var target = get(from, node)
+  var toPath = pathToArray(to)
+  var newIndex = toPath.pop()
+  var parentNode = get(toPath, node)
+  parentNode.children.splice(newIndex, 0, target)
+  return node
+})
+
+/**
+ * Check if a path is actually the root.
+ */
+
+var isRoot = function (path) {
   return path === '0'
 }
 
@@ -2602,114 +2556,9 @@ exports.isRoot = function (path) {
  * 0.2 vs 0.3.5 = false
  */
 
-exports.isWithinPath = function (parentPath, childPath) {
+var isWithinPath = function (parentPath, childPath) {
   return childPath.indexOf(parentPath + '.') === 0
 }
 
-},{}],44:[function(_require,module,exports){
-/**
- * This file lists the supported SVG elements used by the
- * renderer. We may add better SVG support in the future
- * that doesn't require whitelisting elements.
- */
-
-exports.namespace = 'http://www.w3.org/2000/svg'
-
-/**
- * Supported SVG elements
- *
- * @type {Array}
- */
-
-exports.elements = {
-  'circle': true,
-  'defs': true,
-  'ellipse': true,
-  'g': true,
-  'line': true,
-  'linearGradient': true,
-  'mask': true,
-  'path': true,
-  'pattern': true,
-  'polygon': true,
-  'polyline': true,
-  'radialGradient': true,
-  'rect': true,
-  'stop': true,
-  'svg': true,
-  'text': true,
-  'tspan': true
-}
-
-/**
- * Supported SVG attributes
- */
-
-exports.attributes = {
-  'cx': true,
-  'cy': true,
-  'd': true,
-  'dx': true,
-  'dy': true,
-  'fill': true,
-  'fillOpacity': true,
-  'fontFamily': true,
-  'fontSize': true,
-  'fx': true,
-  'fy': true,
-  'gradientTransform': true,
-  'gradientUnits': true,
-  'markerEnd': true,
-  'markerMid': true,
-  'markerStart': true,
-  'offset': true,
-  'opacity': true,
-  'patternContentUnits': true,
-  'patternUnits': true,
-  'points': true,
-  'preserveAspectRatio': true,
-  'r': true,
-  'rx': true,
-  'ry': true,
-  'spreadMethod': true,
-  'stopColor': true,
-  'stopOpacity': true,
-  'stroke': true,
-  'strokeDasharray': true,
-  'strokeLinecap': true,
-  'strokeOpacity': true,
-  'strokeWidth': true,
-  'textAnchor': true,
-  'transform': true,
-  'version': true,
-  'viewBox': true,
-  'x1': true,
-  'x2': true,
-  'x': true,
-  'y1': true,
-  'y2': true,
-  'y': true
-}
-
-/**
- * Is element's namespace SVG?
- *
- * @param {String} name
- */
-
-exports.isElement = function (name) {
-  return name in exports.elements
-}
-
-/**
- * Are element's attributes SVG?
- *
- * @param {String} attr
- */
-
-exports.isAttribute = function (attr) {
-  return attr in exports.attributes
-}
-
-},{}]},{},[38])(38)
+},{"curry":3}]},{},[42])(42)
 });
