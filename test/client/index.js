@@ -17,7 +17,7 @@ it('should render and remove an element', function(){
   assert.equal(el.innerHTML, '')
 })
 
-it('should replace a mounted element', function(){
+it.only('should replace a mounted element', function(){
   var el = this.el
   render(el, <span>Hello World</span>)
   render(el, <div>Foo!</div>)
@@ -80,7 +80,7 @@ it('should create a component with properties', function(){
   remove(this.el)
 })
 
-it.only('should compose components', function(){
+it('should compose components', function(){
   var Composed = {
     render: function(){
       return <HelloWorld />

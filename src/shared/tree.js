@@ -4,7 +4,7 @@ This module makes it easy to work with object trees. This is the same kind of tr
 that's used for the virtual DOM and the kind that we store the rendered components in.
 
 The only real requirement is that each node is an object and has a children
-property. 
+property.
 
 ```
 {
@@ -45,7 +45,7 @@ to the index of the children at each node.
  */
 
 
-var curry = require('curry')
+var curry = require('ramda/src/curry')
 
 /**
  * Convert a string path into a path we can use
@@ -60,10 +60,11 @@ var pathToArray = function (path) {
  * Get a node at a path
  */
 
-var get = function (target, node) {
-  var path = pathToArray(target)
-  while (path.length) {
-    node = node.children[path.shift()]
+var get = function (path, node) {
+  var parts = path.split('.')
+  while (parts.length) {
+    var index = parts.shift()
+    if (index) node = node.children[index]
   }
   return node
 }
@@ -96,7 +97,7 @@ var graft = function (target, newNode, node) {
  * Walk down a node and apply a function to each node
  */
 
-var walkPre = curry(function (fn, node) {
+var walk = curry(function (fn, node) {
   fn(node)
   node.children.forEach(traverse(fn))
 })
@@ -105,7 +106,7 @@ var walkPre = curry(function (fn, node) {
  * Climb up a tree from the leaf nodes
  */
 
-var walkPost = curry(function (fn, node) {
+var climb = curry(function (fn, node) {
   node.children.forEach(climb(fn))
   fn(node)
 })
@@ -132,13 +133,12 @@ var isRoot = function (path) {
 }
 
 /**
- * Checks to see if one tree path is within
- * another tree path. Example:
- *
- * 0.1 vs 0.1.1 = true
- * 0.2 vs 0.3.5 = false
+ * Exports
  */
 
-var isWithinPath = function (parentPath, childPath) {
-  return childPath.indexOf(parentPath + '.') === 0
-}
+exports.get = get
+exports.prune = prune
+exports.graft = graft
+exports.walk = walk
+exports.climb = climb
+exports.move = move

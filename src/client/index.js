@@ -3,29 +3,29 @@ var uid = require('get-uid')
 var defaults = require('object-defaults')
 var isPromise = require('is-promise')
 var events = require('../shared/events')
+var diff = require('../shared/diff')
 var isSVGAttribute = require('is-svg-attribute')
+var isSVGElement = require('is-svg-element').isElement
 var frame = require('./frame')
 var handler = require('./handler')
 var dom = require('./dom')
 var containers = require('./container')
 var svgNamespace = 'http://www.w3.org/2000/svg'
 var elementHelpers = require('../shared/element')
-var nodeType = elementHelpers.nodeType
-
-// Ramda
+var validateComponent = require('../shared/validate')
 var curry = require('ramda/src/curry')
 var prop = require('ramda/src/prop')
 var mapObj = require('ramda/src/mapObj')
 var pipe = require('ramda/src/pipe')
-
-// Fast.js
 var forEach = require('fast.js/forEach')
 var assign = require('fast.js/object/assign')
 var indexOf = require('fast.js/array/indexOf')
 var reduce = require('fast.js/reduce')
+var nodeType = elementHelpers.nodeType
+var mountQueue = []
 
 /**
- * Entity Tree Functions
+ * Entity Functions
  * ============================================================================
  */
 
@@ -84,7 +84,7 @@ var updateEntity = function (entity) {
   if (!shouldRender(entity)) return updateChildren(entity)
   var nextElement = renderEntity(entity)
   if (nextElement === virtualElement) return updateChildren(entity)
-  entity.nativeElement = patchNativeElement(container, entity, virtualElement, nextElement, nativeElement)
+  entity.nativeElement = patchNativeElement(entity, virtualElement, nextElement, nativeElement)
   entity.virtualElement = nextElement
   updateChildren(entity)
   trigger('afterRender', entity, [entity, updatedElement])
@@ -106,9 +106,29 @@ var commitEntity = function (entity) {
  * Remove an entity and all it's children from the entity tree
  */
 
-var removeEntity = function (container, path, entity) {
-  var branch = pruneTree(path, container)
-  tree.iterateUp(beforeUnmount, branch)
+var removeEntity = function (entity) {
+  trigger('beforeUnmount', entity, [entity])
+  removeEntityHandlers(child)
+  removeEntityNativeElement(child)
+}
+
+/**
+ * Remove all event handlers an entity
+ */
+
+var removeEntityHandlers = function (entity, path) {
+  var args = [entity.id]
+  if (path) args.concat(path)
+  handler.remove(args)
+}
+
+/**
+ * Remove all event handlers an entity
+ */
+
+var removeEntityNativeElement = function (entity) {
+  if (!entity.nativeElement || !entity.nativeElement.parentNode) return
+  entity.nativeElement.parentNode.removeChild(entity.nativeElement)
 }
 
 /**
@@ -139,22 +159,10 @@ var isDirty = function (entity) {
  */
 
 var trigger = function (name, entity, args) {
+  if (!entity.type) return
   var fn = entity.type[name]
   if (!fn) return
   return fn(args)
-}
-
-/**
- * Update all entities in a branch that have the same nativeElement. This
- * happens when a component has another component as it's root node.
- */
-
-var updateEntityNativeElement = function (entity, newEl) {
-  if (!entity) return
-  if (entity.owner.children['0'] === entity) {
-    entity.owner.nativeElement = newEl
-    updateEntityNativeElement(entity.parent, newEl)
-  }
 }
 
 /**
@@ -179,30 +187,64 @@ var removeChildren = pipe(
 )
 
 /**
+ * Entity Tree Function
+ * ============================================================================
+ */
+
+/**
+ * Update all entities in a branch that have the same nativeElement. This
+ * happens when a component has another component as it's root node.
+ */
+
+var updateEntityNativeElement = function (entity, newEl) {
+  if (!entity) return
+  if (entity.owner.children['0'] === entity) {
+    entity.owner.nativeElement = newEl
+    updateEntityNativeElement(entity.parent, newEl)
+  }
+}
+
+/**
+ * Remove all entities from a path
+ */
+
+var removeNestedEntities = function (entity, path) {
+  entity.children = reduce(entity.children, function (acc, child, childPath) {
+    if (isWithinPath(path, childPath)) {
+      acc[childPath] = child
+    } else {
+      removeEntity(child)
+    }
+  }, {})
+}
+
+/**
+ * Checks to see if one tree path is within
+ * another tree path. Example:
+ *
+ * 0.1 vs 0.1.1 = true
+ * 0.2 vs 0.3.5 = false
+ */
+
+var isWithinPath = function (parentPath, childPath) {
+  return childPath.indexOf(parentPath + '.') === 0
+}
+
+/**
  * Virtual Tree Functions
  * ============================================================================
  */
 
-/*
- * Removes an element from the DOM and unmounts and components
- * that are within that branch
- */
-
-var getVirtualElement = function (path, virtualElement) {
-  return tree.get(path, virtualElement)
-}
-
-var removeNativeElement = function () {}
-var removeHandlers = function () {}
-
 /**
- * Replace an element in the DOM. Removing all components
- * within that element and re-rendering the new virtual node.
+ * Replace a virtual element with another virtual element within an entity.
+ * This could be any type of node within the virtual DOM tree.
  */
 
-var replaceElement = function (container, entity, path, el, vnode) {
-  removeNestedComponents(container, entity, path)
-  removeNestedHandlers(container, path)
+var replaceElement = function (container, entity, path, previousElement, nextElement) {
+  removeNestedEntities(entity, path)
+  removeEntityHandlers(entity, path)
+
+  var targetNativeElement = dom.getElementByPath(path, el)
   var newEl = renderElement(container, entity, path, vnode)
   insertElement(newEl, indexOf(el, el.parentNode.children), parent)
   updateEntityNativeElement(container, entity, newEl)
@@ -231,16 +273,20 @@ var moveElement = curry(function (entity, parentElement, position) {
  * Create a native element from a virtual element.
  */
 
-var renderElement = function (container, entity, path, vnode) {
+var renderElement = function (container, parentEntity, path, vnode) {
   switch (nodeType(vnode)) {
     case 'text':
       return document.createTextNode(vnode)
     case 'element':
-      return toNativeElement(container, entity, path, vnode)
+      return toNativeElement(container, parentEntity, path, vnode)
     case 'component':
-      var child = createEntity(container, entity, path, vnode)
-      entity.children[path] = child
-      mountQueue.push(entity)
+      var child = createEntity(container, parentEntity, path, vnode)
+      if (parentEntity) {
+        parentEntity.children[path] = child
+      } else {
+        container.children[path] = child
+      }
+      mountQueue.push(child)
       return child.nativeElement
   }
 }
@@ -310,7 +356,7 @@ var patch = curry(function (container, entity, parentElement, change) {
   var path = change.path
   var nextElement = change.nextElement
   var previousElement = change.previousElement
-  var nativeElement = getElementByPath(change.path, parentElement)
+  var nativeElement = dom.getElementByPath(change.path, parentElement)
   switch (change.type) {
     case 'replaceText':
       nativeElement.data = change.value
@@ -322,8 +368,10 @@ var patch = curry(function (container, entity, parentElement, change) {
       insertElement(container, entity, path, nativeElement, nextElement)
     case 'moveElement':
       moveElement(container, entity, nativeElement, change.previousPath, change.path)
-    case 'updateProps':
+    case 'updateComponent':
       updateProps(container, entity, change.path, change.value)
+    case 'removeComponent':
+      removeEntity()
     case 'setAttribute':
       setAttribute()
     case 'removeAttribute':
@@ -331,26 +379,13 @@ var patch = curry(function (container, entity, parentElement, change) {
   }
 })
 
-// var removeElement = function(container, entity, path, nativeElement) {
-//   removeNestedComponents()
-//   removeNativeElement(path, nativeElement)
-// }
-
-// var removeNestedComponents = function () {
-//   for (var childPath in entity.children) {
-
-//   }
-//   forEach(getNestedComponents(path, entity), removeEntity)
-// }
-
 /**
  * Create a native element from a virtual element.
  */
 
 var toNativeElement = function (container, entity, path, vnode) {
-  var el = createElement(vnode.type)
-  el.__entity__ = entity.id
-  el.__container__ = container.id
+  var tagName = vnode.type
+  var el = isSVGElement(tagName) ? document.createElementNS(svgNamespace, vnode.type) : document.createElement(vnode.type)
   forEach(vnode.attributes, setAttribute(container, entity, path, el))
   forEach(vnode.children, function (child, i) {
     if (child == null) return
@@ -398,9 +433,9 @@ var handleNativeEvent = function (event) {
  * dependning on the attribute name
  */
 
-var setAttribute = function (container, entity, path, el, value, name) {
+var setAttribute = curry(function (container, entity, path, el, value, name) {
   if (events[name]) {
-    handler.set([container.id, events[name], entity.id, path], handleEvent(container, entity, value))
+    handler.set([entity.id, path, events[name]], handleEvent(container, entity, value))
     return
   }
   switch (name) {
@@ -421,16 +456,16 @@ var setAttribute = function (container, entity, path, el, value, name) {
       el.setAttribute(name, value)
       break
   }
-}
+})
 
 /**
  * Remove an attribute, performing additional transformations
  * depending on the attribute name
  */
 
-var removeAttribute = function (container, entity, path, el, name) {
+var removeAttribute = curry(function (container, entity, path, el, name) {
   if (events[name]) {
-    handler.remove([container.id, events[name], entity.id, path])
+    handler.remove([entity.id, path, events[name]])
     return
   }
   switch (name) {
@@ -448,7 +483,7 @@ var removeAttribute = function (container, entity, path, el, name) {
       el.removeAttribute(name)
       break
   }
-}
+})
 
 /**
  * Add all of the DOM event listeners
@@ -517,7 +552,7 @@ var flushMountQueue = function () {
  */
 
 exports.render = curry(function (node, nextElement) {
-  var container = createContainer(node)
+  var container = containers.create(node)
   var nativeElement = container.nativeElement
   var virtualElement = container.virtualElement
   frame.clear(container.id)
@@ -525,10 +560,10 @@ exports.render = curry(function (node, nextElement) {
     container.nativeElement = renderElement(container, null, '0', nextElement)
     node.appendChild(container.nativeElement)
   } else {
-    container.nativeElement = patchElement(container, null, virtualElement, nextElement, nativeElement)
-    container.virtualElement = nextElement
+    container.nativeElement = patchNativeElement(container, container, virtualElement, nextElement, nativeElement)
     updateChildren(container)
   }
+  container.virtualElement = nextElement
   flushMountQueue()
 })
 
@@ -540,10 +575,12 @@ exports.render = curry(function (node, nextElement) {
 
 exports.remove = function (node) {
   var container = containers.get(node)
+  if (!container) return
+  containers.remove(node)
+  frame.clear(container.id)
   removeNativeEventListeners(container)
-  removeNativeElement(container, 'root', '0', container.nativeElement)
-  containers.remove(container)
-  frame.remove(container.id)
+  removeChildren(container)
+  node.removeChild(container.nativeElement)
 }
 
 /**

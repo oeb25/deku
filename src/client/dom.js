@@ -12,3 +12,17 @@ exports.insertAt = function (element, newPosition, childEl) {
     }
   }
 }
+
+/**
+ * Find an element using a index path, eg. 0.1.4
+ */
+
+exports.getElementByPath = function (path, parent) {
+  var parts = path.split('.')
+  var node = parent
+  while (parts.length) {
+    var index = parts.shift()
+    if (index) node = node.children[index]
+  }
+  return node
+}

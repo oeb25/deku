@@ -1,9 +1,23 @@
+/*
+
+This module compares two virtual elements and returns a diff of the the two
+objects in the form of an array of changes.
+
+    var patch = diff(<div />, <span />)
+
+The changes are just objects with a type and information about the path where
+that change occured. We use index paths, eg. 0.1.2, to find an edge down the
+virtual element tree. You can use this path to find the matching real DOM node
+to perform the changes
+
+*/
+
 var nodeType = require('./element').nodeType
 var isEmpty = require('is-empty')
 
 module.exports = function (prev, next) {
   var changes = [] // This is mutated
-  diffNode('0', prev, next, changes)
+  diffNode('', prev, next, changes)
   return changes
 }
 
@@ -18,10 +32,13 @@ var diffNode = function (path, prev, next, changes) {
   switch (nextType) {
     case 'text':
       diffText(path, prev, next, changes)
+      return
     case 'element':
       diffElement(path, prev, next, changes)
+      return
     case 'component':
       diffComponent(path, prev, next, changes)
+      return
   }
 }
 
@@ -104,12 +121,18 @@ var diffAttributes = function (path, prev, next, changes) {
 }
 
 var diffComponent = function (path, prev, next, changes) {
-  if (next.type !== prev.type) return replaceElement(path, prev, next, changes)
+  if (next.type !== prev.type) {
+    replaceElement(path, prev, next, changes)
+    return
+  }
   updateProps(path, next.attributes, changes)
 }
 
 var diffElement = function (path, prev, next, changes) {
-  if (next.type !== prev.type) return replaceElement(path, prev, next, changes)
+  if (next.type !== prev.type) {
+    replaceElement(path, prev, next, changes)
+    return
+  }
   diffAttributes(path, prev, next, changes)
   diffChildren(path, prev, next, changes)
 }

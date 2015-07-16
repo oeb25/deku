@@ -11,6 +11,7 @@ they want and this is kept as an implementation detail.
 
 var isDom = require('is-dom')
 var Map = require('ez-map')
+var uid = require('get-uid')
 var containers = new Map() // This could be a WeakMap
 
 exports.create = function (node) {
