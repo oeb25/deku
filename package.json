@@ -5,6 +5,7 @@
   "repository": "dekujs/deku",
   "description": "Create view components using a virtual DOM",
   "main": "lib/index.js",
+  "browser": "build/deku.js",
   "devDependencies": {
     "babelify": "^6.1.1",
     "bfc": "~0.3.1",
